@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build and dist directories
+dist/
+build/
+out/
+.next/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+
+# Cloud provider credentials
+.aws/
+.azure/
+*.pem
+*.key
+service-account-*.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.directory
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Build tooling
+.npm/
+.yarn/
+.eslintcache
+.stylelintcache
+tsconfig.tsbuildinfo
+
+# Docker
+.docker/
+docker-data/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+
+# Cache
+.cache/
+.parcel-cache/

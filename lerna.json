@@ -1,0 +1,24 @@
+{
+    "version": "0.1.0",
+    "npmClient": "npm",
+    "useWorkspaces": true,
+    "packages": [
+      "packages/*",
+      "packages/dashboard/*"
+    ],
+    "command": {
+      "bootstrap": {
+        "npmClientArgs": ["--no-package-lock"]
+      },
+      "version": {
+        "allowBranch": ["main", "develop"],
+        "conventionalCommits": true,
+        "message": "chore(release): publish %s"
+      },
+      "publish": {
+        "conventionalCommits": true,
+        "message": "chore(release): publish %s",
+        "registry": "https://registry.npmjs.org/"
+      }
+    }
+  }

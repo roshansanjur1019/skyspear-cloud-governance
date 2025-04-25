@@ -1,0 +1,43 @@
+{
+    "name": "spearpoint-cloud-governance",
+    "version": "0.1.0",
+    "description": "SpearPoint Technologies - Precision Cloud Governance Platform",
+    "private": true,
+    "workspaces": [
+      "packages/*",
+      "packages/dashboard/*"
+    ],
+    "scripts": {
+      "bootstrap": "lerna bootstrap",
+      "clean": "lerna clean",
+      "build": "lerna run build",
+      "lint": "lerna run lint",
+      "test": "lerna run test",
+      "scan": "node packages/core/dist/cli.js scan",
+      "dev": "docker-compose up",
+      "dev:backend": "cd packages/dashboard/backend && npm run dev",
+      "dev:frontend": "cd packages/dashboard/frontend && npm run dev"
+    },
+    "keywords": [
+      "cloud",
+      "governance",
+      "aws",
+      "azure",
+      "gcp",
+      "multi-cloud",
+      "cost-optimization",
+      "security"
+    ],
+    "author": "SpearPoint Technologies",
+    "license": "UNLICENSED",
+    "devDependencies": {
+      "lerna": "^6.6.2",
+      "rimraf": "^5.0.1",
+      "typescript": "^5.2.2",
+      "eslint": "^8.48.0",
+      "prettier": "^3.0.3"
+    },
+    "engines": {
+      "node": ">=18.0.0"
+    }
+  }
