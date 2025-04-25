@@ -1,0 +1,62 @@
+# Docker Compose for Development Environment
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=spearpoint
+      - MONGO_INITDB_ROOT_PASSWORD=spearpoint_dev_pass
+    networks:
+      - spearpoint-network
+
+  # Backend API
+  api:
+    build:
+      context: ./packages/dashboard/backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./packages/dashboard/backend:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DATABASE_URL=mongodb://spearpoint:spearpoint_dev_pass@mongodb:27017/spearpoint?authSource=admin
+      - JWT_SECRET=dev_secret_key_change_in_production
+    networks:
+      - spearpoint-network
+
+  # Frontend Dashboard
+  dashboard:
+    build:
+      context: ./packages/dashboard/frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./packages/dashboard/frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    environment:
+      - REACT_APP_API_URL=http://localhost:3001/api
+    networks:
+      - spearpoint-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  spearpoint-network:
+    driver: bridge
