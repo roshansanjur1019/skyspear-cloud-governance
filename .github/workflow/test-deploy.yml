@@ -1,0 +1,68 @@
+name: Deploy to Test Environment
+
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  deploy_test:
+    name: Deploy to Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+      
+      - name: Terraform Init
+        run: |
+          cd terraform/environments/test
+          terraform init
+      
+      - name: Terraform Plan
+        run: |
+          cd terraform/environments/test
+          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}" \
+                        -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+                        -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}"
+      
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          cd terraform/environments/test
+          terraform apply -var="db_password=${{ secrets.DB_PASSWORD }}" \
+                         -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+                         -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}" \
+                         -auto-approve
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Build and push API image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./packages/dashboard/backend-python
+          push: true
+          tags: ${{ secrets.ECR_REPOSITORY_URL }}/spearpoint-api:latest
+      
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./packages/dashboard/frontend
+          push: true
+          tags: ${{ secrets.ECR_REPOSITORY_URL }}/spearpoint-frontend:latest
+      
+      - name: Force ECS service updates
+        run: |
+          aws ecs update-service --cluster spearpoint-test --service spearpoint-test-api --force-new-deployment
+          aws ecs update-service --cluster spearpoint-test --service spearpoint-test-frontend --force-new-deployment
