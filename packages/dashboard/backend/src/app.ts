@@ -7,11 +7,13 @@ import compression from 'compression';
 import { config, healthCheck } from './config';
 import { errorHandler, AppError } from './middleware/errorHandler';
 
-// Import routes
-import authRoutes from './routes/auth';
-import resourceRoutes from './routes/resources';
-import costRoutes from './routes/costs';
-import securityRoutes from './routes/security';
+// Import routes from the index file
+import { 
+  authRoutes, 
+  resourceRoutes, 
+  costRoutes, 
+  securityRoutes 
+} from './routes';
 
 // Create Express application
 const app = express();
