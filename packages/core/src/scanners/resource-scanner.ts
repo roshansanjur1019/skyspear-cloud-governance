@@ -4,7 +4,7 @@ import { Logger } from '../utils/logger';
 
 export class ResourceScanner {
   constructor(
-    private readonly providers: Record<string, any>,
+    private readonly providers: Record<string, unknown>,
     private readonly logger: Logger
   ) {}
   
@@ -66,9 +66,10 @@ export class ResourceScanner {
       
       this.logger.info(`Found ${resources.length} AWS resources`);
       return resources;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error scanning AWS resources:', error);
-      throw error;
+      throw new Error(`AWS resource scan failed: ${errorMessage}`);
     }
   }
   
@@ -95,9 +96,10 @@ export class ResourceScanner {
       
       this.logger.info(`Found ${resources.length} Azure resources`);
       return resources;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error scanning Azure resources:', error);
-      throw error;
+      throw new Error(`Azure resource scan failed: ${errorMessage}`);
     }
   }
   
@@ -124,9 +126,10 @@ export class ResourceScanner {
       
       this.logger.info(`Found ${resources.length} GCP resources`);
       return resources;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error scanning GCP resources:', error);
-      throw error;
+      throw new Error(`GCP resource scan failed: ${errorMessage}`);
     }
   }
 }

@@ -1,6 +1,11 @@
 // packages/core/src/platform.ts
 import { v4 as uuidv4 } from 'uuid';
 import { CloudCredentials, SpearPointConfig, ScanResults } from './types';
+import { Logger } from './utils/logger';
+import { ProviderFactory } from './providers/provider-factory';
+import { ResourceScanner } from './scanners/resource-scanner';
+import { CostScanner } from './scanners/cost-scanner';
+import { SecurityScanner } from './scanners/security-scanner';
 
 /**
  * SpearPoint Platform - Core cloud governance platform
@@ -12,8 +17,9 @@ import { CloudCredentials, SpearPointConfig, ScanResults } from './types';
 export class SpearPointPlatform {
   private readonly platformVersion = '0.1.0';
   private readonly modules: Record<string, boolean>;
-  private readonly providers: Record<string, any> = {};
-  private logger: any;
+  private readonly providers: Record<string, unknown> = {};
+  private logger: Logger;
+  private providerFactory: ProviderFactory;
   
   /**
    * Create a new SpearPoint Platform instance
@@ -28,13 +34,11 @@ export class SpearPointPlatform {
       multiCloudDashboard: true // Always enabled
     };
     
-    // Initialize logger (placeholder - will be implemented with proper logger)
-    this.logger = {
-      info: (message: string, ...args: any[]) => console.log(`[INFO] ${message}`, ...args),
-      error: (message: string, ...args: any[]) => console.error(`[ERROR] ${message}`, ...args),
-      warn: (message: string, ...args: any[]) => console.warn(`[WARN] ${message}`, ...args),
-      debug: (message: string, ...args: any[]) => console.debug(`[DEBUG] ${message}`, ...args)
-    };
+    // Initialize logger
+    this.logger = new Logger(config.logLevel || 'info');
+    
+    // Initialize provider factory
+    this.providerFactory = new ProviderFactory(this.logger);
     
     this.logger.info(`SpearPoint Platform ${this.platformVersion} initialized`);
     this.logger.debug('Modules enabled:', this.modules);
@@ -52,42 +56,27 @@ export class SpearPointPlatform {
       
       // AWS Connection
       if (credentials.aws) {
-        // Placeholder for AWS provider initialization
-        this.providers.aws = {
-          // Placeholder for AWS services
-          ec2: {},
-          s3: {},
-          rds: {},
-          cloudwatch: {}
-        };
+        this.providers.aws = await this.providerFactory.createAwsProvider(credentials.aws);
         this.logger.info('AWS provider connected');
       }
       
       // Azure Connection
       if (credentials.azure) {
-        // Placeholder for Azure provider initialization
-        this.providers.azure = {
-          // Placeholder for Azure services
-          compute: {},
-          resources: {}
-        };
+        this.providers.azure = await this.providerFactory.createAzureProvider(credentials.azure);
         this.logger.info('Azure provider connected');
       }
       
       // GCP Connection
       if (credentials.gcp) {
-        // Placeholder for GCP provider initialization
-        this.providers.gcp = {
-          // Placeholder for GCP services
-          compute: {}
-        };
+        this.providers.gcp = await this.providerFactory.createGcpProvider(credentials.gcp);
         this.logger.info('GCP provider connected');
       }
       
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error connecting to cloud providers:', error);
-      throw new Error(`Failed to connect to cloud providers: ${error.message}`);
+      throw new Error(`Failed to connect to cloud providers: ${errorMessage}`);
     }
   }
   
@@ -125,14 +114,26 @@ export class SpearPointPlatform {
     };
     
     try {
-      // Placeholder for resource scanning logic
-      results.resources = [];
+      // Create scanners
+      const resourceScanner = new ResourceScanner(this.providers, this.logger);
+      const costScanner = new CostScanner(this.providers, this.logger);
+      const securityScanner = new SecurityScanner(this.providers, this.logger);
       
-      // Placeholder for cost optimization logic
-      results.costs = [];
+      // Scan resources
+      if (options.includeResources !== false) {
+        results.resources = await resourceScanner.scan();
+        results.metadata.resourceCount = results.resources.length;
+      }
       
-      // Placeholder for security scanning logic
-      results.security = [];
+      // Scan for cost optimizations
+      if (this.modules.costOptimization && options.includeCosts !== false) {
+        results.costs = await costScanner.scan(results.resources);
+      }
+      
+      // Scan for security issues
+      if (this.modules.securityCompliance && options.includeSecurity !== false) {
+        results.security = await securityScanner.scan(results.resources);
+      }
       
       // Generate combined recommendations
       results.optimization = [
@@ -152,12 +153,11 @@ export class SpearPointPlatform {
       const endTime = new Date();
       results.metadata.endTime = endTime;
       results.metadata.duration = endTime.getTime() - startTime.getTime();
-      results.metadata.resourceCount = results.resources.length;
       
       this.logger.info(`Environment scan ${scanId} completed in ${results.metadata.duration}ms`);
       
       return results;
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(`Scan ${scanId} failed:`, error);
       
       // Update metadata for failed scan
@@ -166,7 +166,8 @@ export class SpearPointPlatform {
       results.metadata.duration = endTime.getTime() - startTime.getTime();
       results.metadata.status = 'failed';
       
-      throw new Error(`Scan failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Scan failed: ${errorMessage}`);
     }
   }
 }

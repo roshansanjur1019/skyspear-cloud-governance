@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import api from '../../api/client';
 
 // Types
@@ -30,6 +30,21 @@ interface RegisterData {
   company?: string;
 }
 
+interface AuthResponse {
+  status: string;
+  token: string;
+  user: User;
+}
+
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
+
 // Initial state
 const initialState: AuthState = {
   user: null,
@@ -40,56 +55,75 @@ const initialState: AuthState = {
 };
 
 // Async actions
-export const login = createAsyncThunk(
+export const login = createAsyncThunk<
+  AuthResponse,
+  LoginCredentials,
+  { rejectValue: string }
+>(
   'auth/login',
-  async (credentials: LoginCredentials, { rejectWithValue }) => {
+  async (credentials, { rejectWithValue }) => {
     try {
-      const response = await api.post('/auth/login', credentials);
+      const response = await api.post<AuthResponse>('/auth/login', credentials);
       localStorage.setItem('token', response.data.token);
       return response.data;
-    } catch (error: any) {
+    } catch (error) {
+      const apiError = error as ApiError;
       return rejectWithValue(
-        error.response?.data?.message || 'Login failed. Please try again.'
+        apiError.response?.data?.message || apiError.message || 'Login failed. Please try again.'
       );
     }
   }
 );
 
-export const register = createAsyncThunk(
+export const register = createAsyncThunk<
+  AuthResponse,
+  RegisterData,
+  { rejectValue: string }
+>(
   'auth/register',
-  async (userData: RegisterData, { rejectWithValue }) => {
+  async (userData, { rejectWithValue }) => {
     try {
-      const response = await api.post('/auth/register', userData);
+      const response = await api.post<AuthResponse>('/auth/register', userData);
       localStorage.setItem('token', response.data.token);
       return response.data;
-    } catch (error: any) {
+    } catch (error) {
+      const apiError = error as ApiError;
       return rejectWithValue(
-        error.response?.data?.message || 'Registration failed. Please try again.'
+        apiError.response?.data?.message || apiError.message || 'Registration failed. Please try again.'
       );
     }
   }
 );
 
-export const checkAuth = createAsyncThunk(
+export const checkAuth = createAsyncThunk<
+  { user: User },
+  void,
+  { rejectValue: string }
+>(
   'auth/checkAuth',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get('/auth/profile');
-      return response.data;
-    } catch (error: any) {
+      const response = await api.get<{ status: string; user: User }>('/auth/profile');
+      return { user: response.data.user };
+    } catch (error) {
       localStorage.removeItem('token');
       return rejectWithValue('Authentication failed');
     }
   }
 );
 
-export const logout = createAsyncThunk('auth/logout', async () => {
-  try {
-    await api.post('/auth/logout');
-  } finally {
-    localStorage.removeItem('token');
+export const logout = createAsyncThunk(
+  'auth/logout', 
+  async (): Promise<void> => {
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('token');
+    }
   }
-});
+);
 
 // Slice
 const authSlice = createSlice({
@@ -115,7 +149,7 @@ const authSlice = createSlice({
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload as string;
+        state.error = action.payload ?? 'Login failed';
       });
 
     // Register
@@ -132,7 +166,7 @@ const authSlice = createSlice({
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload as string;
+        state.error = action.payload ?? 'Registration failed';
       });
 
     // Check Auth

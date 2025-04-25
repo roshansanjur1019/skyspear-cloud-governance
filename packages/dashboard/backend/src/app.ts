@@ -4,7 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
-import { config } from './config';
+import { config, healthCheck } from './config';
 import { errorHandler, AppError } from './middleware/errorHandler';
 
 // Import routes
@@ -22,8 +22,9 @@ mongoose
   .then(() => {
     console.log('Connected to MongoDB');
   })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
+  .catch((err: unknown) => {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('MongoDB connection error:', errorMessage);
     process.exit(1);
   });
 
@@ -45,16 +46,12 @@ app.use('/api/costs', costRoutes);
 app.use('/api/security', securityRoutes);
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'SpearPoint API is running',
-    version: config.version
-  });
+app.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json(healthCheck.getStatus());
 });
 
 // API documentation
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'success',
     message: 'SpearPoint API',
@@ -64,7 +61,7 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Handle undefined routes
-app.all('*', (req: Request, res: Response, next: NextFunction) => {
+app.all('*', (req: Request, _res: Response, next: NextFunction) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
 
@@ -73,15 +70,27 @@ app.use(errorHandler);
 
 // Start server
 const PORT = config.port || 3001;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} in ${config.env} mode`);
 });
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (err: Error) => {
+process.on('unhandledRejection', (err: unknown) => {
   console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-  console.error(err.name, err.message);
-  process.exit(1);
+  console.error(err instanceof Error ? err.name : 'Error', err instanceof Error ? err.message : String(err));
+  
+  // Close server & exit process
+  server.close(() => {
+    process.exit(1);
+  });
+});
+
+// Handle SIGTERM signal
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
+  server.close(() => {
+    console.log('💥 Process terminated!');
+  });
 });
 
 export default app;

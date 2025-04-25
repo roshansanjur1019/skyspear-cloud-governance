@@ -4,7 +4,7 @@ import { Logger } from '../utils/logger';
 
 export class SecurityScanner {
   constructor(
-    private readonly providers: Record<string, any>,
+    private readonly providers: Record<string, unknown>,
     private readonly logger: Logger
   ) {}
   
@@ -68,9 +68,10 @@ export class SecurityScanner {
       
       this.logger.info(`Found ${issues.length} AWS security issues`);
       return issues;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error scanning AWS security:', error);
-      throw error;
+      throw new Error(`AWS security scan failed: ${errorMessage}`);
     }
   }
   
@@ -99,9 +100,10 @@ export class SecurityScanner {
       
       this.logger.info(`Found ${issues.length} Azure security issues`);
       return issues;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error scanning Azure security:', error);
-      throw error;
+      throw new Error(`Azure security scan failed: ${errorMessage}`);
     }
   }
   
@@ -130,9 +132,10 @@ export class SecurityScanner {
       
       this.logger.info(`Found ${issues.length} GCP security issues`);
       return issues;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error scanning GCP security:', error);
-      throw error;
+      throw new Error(`GCP security scan failed: ${errorMessage}`);
     }
   }
 }

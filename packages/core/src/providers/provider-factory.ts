@@ -1,16 +1,82 @@
 // packages/core/src/providers/provider-factory.ts
 import { Logger } from '../utils/logger';
 
+// Define interfaces for provider credentials
+interface AwsCredentials {
+  accessKey: string;
+  secretKey: string;
+  region?: string;
+}
+
+interface AzureCredentials {
+  subscriptionId: string;
+  tenantId: string;
+  clientId?: string;
+  clientSecret?: string;
+}
+
+interface GcpCredentials {
+  projectId: string;
+  keyFilePath?: string;
+  credentials?: Record<string, unknown>;
+}
+
+// Define interfaces for provider return types
+interface AwsProvider {
+  ec2: {
+    describeInstances: () => Promise<{ Reservations: unknown[] }>;
+    describeSecurityGroups: () => Promise<{ SecurityGroups: unknown[] }>;
+  };
+  s3: {
+    listBuckets: () => Promise<{ Buckets: unknown[] }>;
+    getBucketAcl: () => Promise<{ Grants: unknown[] }>;
+    getBucketEncryption: () => Promise<Record<string, unknown>>;
+  };
+  cloudwatch: {
+    getMetricStatistics: () => Promise<{ Datapoints: unknown[] }>;
+  };
+  costExplorer: {
+    getCostAndUsage: () => Promise<{ ResultsByTime: unknown[] }>;
+  };
+}
+
+interface AzureProvider {
+  compute: {
+    virtualMachines: {
+      listAll: () => Promise<unknown[]>;
+    };
+  };
+  resources: {
+    resourceGroups: {
+      list: () => Promise<unknown[]>;
+    };
+  };
+  network: {
+    networkInterfaces: {
+      list: () => Promise<unknown[]>;
+    };
+  };
+}
+
+interface GcpProvider {
+  compute: {
+    getVMs: () => Promise<unknown[][]>;
+  };
+  storage: {
+    getBuckets: () => Promise<unknown[][]>;
+  };
+}
+
 export class ProviderFactory {
   constructor(private readonly logger: Logger) {}
   
-  async createAwsProvider(credentials: any) {
+  async createAwsProvider(credentials: AwsCredentials): Promise<AwsProvider> {
     this.logger.debug('Creating AWS provider with credentials');
     
     try {
       // In a real implementation, you would use AWS SDK
       // This is a simplified placeholder
-      const awsProvider = {
+      const awsProvider: AwsProvider = {
         ec2: {
           describeInstances: () => Promise.resolve({ Reservations: [] }),
           describeSecurityGroups: () => Promise.resolve({ SecurityGroups: [] })
@@ -29,19 +95,20 @@ export class ProviderFactory {
       };
       
       return awsProvider;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Failed to initialize AWS provider:', error);
-      throw new Error(`AWS provider initialization failed: ${error.message}`);
+      throw new Error(`AWS provider initialization failed: ${errorMessage}`);
     }
   }
   
-  async createAzureProvider(credentials: any) {
+  async createAzureProvider(credentials: AzureCredentials): Promise<AzureProvider> {
     this.logger.debug('Creating Azure provider with credentials');
     
     try {
       // In a real implementation, you would use Azure SDK
       // This is a simplified placeholder
-      const azureProvider = {
+      const azureProvider: AzureProvider = {
         compute: {
           virtualMachines: {
             listAll: () => Promise.resolve([])
@@ -60,19 +127,20 @@ export class ProviderFactory {
       };
       
       return azureProvider;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Failed to initialize Azure provider:', error);
-      throw new Error(`Azure provider initialization failed: ${error.message}`);
+      throw new Error(`Azure provider initialization failed: ${errorMessage}`);
     }
   }
   
-  async createGcpProvider(credentials: any) {
+  async createGcpProvider(credentials: GcpCredentials): Promise<GcpProvider> {
     this.logger.debug('Creating GCP provider with credentials');
     
     try {
       // In a real implementation, you would use GCP SDK
       // This is a simplified placeholder
-      const gcpProvider = {
+      const gcpProvider: GcpProvider = {
         compute: {
           getVMs: () => Promise.resolve([[]])
         },
@@ -82,13 +150,13 @@ export class ProviderFactory {
       };
       
       return gcpProvider;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Failed to initialize GCP provider:', error);
-      throw new Error(`GCP provider initialization failed: ${error.message}`);
+      throw new Error(`GCP provider initialization failed: ${errorMessage}`);
     }
   }
 }
 
-// Don't forget to create an index.ts file in the providers directory
-// providers/index.ts
+// Export from the providers directory
 export * from './provider-factory';

@@ -1,8 +1,14 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 // Load environment variables from .env file
-dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+const envPath = path.resolve(process.cwd(), '../../.env');
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else {
+  dotenv.config();
+}
 
 interface Config {
   env: string;
@@ -31,7 +37,9 @@ export const config: Config = {
   databaseUrl: process.env.DATABASE_URL || 'mongodb://localhost:27017/spearpoint',
   jwtSecret: process.env.JWT_SECRET || 'dev_secret_key_change_in_production',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
-  corsOrigin: process.env.CORS_ORIGIN || ['http://localhost:3000', 'https://dashboard.spearpointtech.com'],
+  corsOrigin: process.env.CORS_ORIGIN ? 
+    process.env.CORS_ORIGIN.split(',') : 
+    ['http://localhost:3000', 'https://dashboard.spearpointtech.com'],
   awsRegion: process.env.AWS_REGION,
   awsAccessKey: process.env.AWS_ACCESS_KEY_ID,
   awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -43,13 +51,26 @@ export const config: Config = {
   encryptionKey: process.env.ENCRYPTION_KEY || 'development_encryption_key_change_me'
 };
 
-// Validate required configuration
+// Validate required configuration for production environment
 if (config.env === 'production') {
   const requiredEnvVars = [
     'DATABASE_URL',
     'JWT_SECRET',
     'ENCRYPTION_KEY'
   ];
+  
+  // Add cloud provider credentials if they're being used
+  if (process.env.USE_AWS === 'true') {
+    requiredEnvVars.push('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION');
+  }
+  
+  if (process.env.USE_AZURE === 'true') {
+    requiredEnvVars.push('AZURE_SUBSCRIPTION_ID', 'AZURE_TENANT_ID');
+  }
+  
+  if (process.env.USE_GCP === 'true') {
+    requiredEnvVars.push('GCP_PROJECT_ID');
+  }
 
   for (const envVar of requiredEnvVars) {
     if (!process.env[envVar]) {
@@ -58,3 +79,14 @@ if (config.env === 'production') {
     }
   }
 }
+
+// Add health check information
+export const healthCheck = {
+  getStatus: (): { status: string; version: string; environment: string } => {
+    return {
+      status: 'healthy',
+      version: config.version,
+      environment: config.env
+    };
+  }
+};

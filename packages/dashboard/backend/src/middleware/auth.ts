@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/user';
+import { User, IUser } from '../models/user';
 import { AppError } from './errorHandler';
 import { config } from '../config';
 
@@ -8,7 +8,7 @@ import { config } from '../config';
 declare global {
   namespace Express {
     interface Request {
-      user: any;
+      user: IUser;
     }
   }
 }
@@ -23,7 +23,7 @@ export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     let token: string | undefined;
 
@@ -46,7 +46,7 @@ export const authenticate = async (
     const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
 
     // Check if user still exists
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id) as IUser | null;
     if (!user) {
       return next(
         new AppError(
@@ -66,14 +66,15 @@ export const authenticate = async (
     // Grant access to protected route
     req.user = user;
     next();
-  } catch (error) {
-    next(new AppError('Authentication failed', 401));
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    next(new AppError(`Authentication failed: ${errorMessage}`, 401));
   }
 };
 
 // Role-based Authorization Middleware
 export const restrictTo = (...roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     // Check if user role is included in the allowed roles
     if (!roles.includes(req.user.role)) {
       return next(

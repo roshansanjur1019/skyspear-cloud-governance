@@ -4,7 +4,7 @@ import { Logger } from '../utils/logger';
 
 export class CostScanner {
   constructor(
-    private readonly providers: Record<string, any>,
+    private readonly providers: Record<string, unknown>,
     private readonly logger: Logger
   ) {}
   
@@ -70,9 +70,10 @@ export class CostScanner {
       }
       
       return recommendations;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error analyzing AWS costs:', error);
-      throw error;
+      throw new Error(`AWS cost analysis failed: ${errorMessage}`);
     }
   }
   
@@ -98,9 +99,10 @@ export class CostScanner {
       }
       
       return recommendations;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error analyzing Azure costs:', error);
-      throw error;
+      throw new Error(`Azure cost analysis failed: ${errorMessage}`);
     }
   }
   
@@ -126,9 +128,10 @@ export class CostScanner {
       }
       
       return recommendations;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error analyzing GCP costs:', error);
-      throw error;
+      throw new Error(`GCP cost analysis failed: ${errorMessage}`);
     }
   }
 }
