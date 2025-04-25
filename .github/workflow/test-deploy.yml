@@ -3,10 +3,11 @@ name: Deploy to Test Environment
 on:
   push:
     branches: [ develop ]
+  workflow_dispatch:
 
 jobs:
-  deploy_test:
-    name: Deploy to Test
+  deploy_infrastructure:
+    name: Deploy Infrastructure
     runs-on: ubuntu-latest
     
     steps:
@@ -23,89 +24,116 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
       
+      # Generate random passwords for database and JWT secret
+      - name: Generate random passwords
+        id: generate-passwords
+        run: |
+          DB_PASSWORD=$(openssl rand -base64 16)
+          JWT_SECRET=$(openssl rand -base64 32)
+          echo "DB_PASSWORD=${DB_PASSWORD}" >> $GITHUB_ENV
+          echo "JWT_SECRET=${JWT_SECRET}" >> $GITHUB_ENV
+          
+          # Store these values in AWS SSM Parameter Store for future use
+          aws ssm put-parameter --name "/spearpoint/test/db_password" --value "${DB_PASSWORD}" --type "SecureString" --overwrite
+          aws ssm put-parameter --name "/spearpoint/test/jwt_secret" --value "${JWT_SECRET}" --type "SecureString" --overwrite
+      
+      - name: Get AWS Account ID
+        id: get-aws-account
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
+      
       - name: Terraform Init
         run: |
           cd terraform/environments/test
           terraform init
       
+      - name: Terraform Validate
+        run: |
+          cd terraform/environments/test
+          terraform validate
+      
       - name: Terraform Plan
         run: |
           cd terraform/environments/test
-          terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}" \
-                        -var="jwt_secret=${{ secrets.JWT_SECRET }}"
+          terraform plan -var="db_password=${DB_PASSWORD}" \
+                        -var="jwt_secret=${JWT_SECRET}" \
+                        -var="aws_account_id=${AWS_ACCOUNT_ID}"
       
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/develop'
         run: |
           cd terraform/environments/test
-          terraform apply -var="db_password=${{ secrets.DB_PASSWORD }}" \
-                         -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+          terraform apply -var="db_password=${DB_PASSWORD}" \
+                         -var="jwt_secret=${JWT_SECRET}" \
+                         -var="aws_account_id=${AWS_ACCOUNT_ID}" \
                          -auto-approve
       
-      # Get the ECR repository URLs from Terraform outputs
-      - name: Get ECR Repository URLs
-        if: github.ref == 'refs/heads/develop'
-        id: get-ecr-urls
+      - name: Get Infrastructure Outputs
+        id: terraform-outputs
         run: |
           cd terraform/environments/test
-          BACKEND_ECR_URL=$(terraform output -raw backend_repository_url)
-          FRONTEND_ECR_URL=$(terraform output -raw frontend_repository_url)
-          echo "BACKEND_ECR_URL=$BACKEND_ECR_URL" >> $GITHUB_ENV
-          echo "FRONTEND_ECR_URL=$FRONTEND_ECR_URL" >> $GITHUB_ENV
+          BACKEND_REPO=$(terraform output -raw backend_repository_url)
+          FRONTEND_REPO=$(terraform output -raw frontend_repository_url)
+          echo "BACKEND_REPO=${BACKEND_REPO}" >> $GITHUB_ENV
+          echo "FRONTEND_REPO=${FRONTEND_REPO}" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=$(terraform output -raw cluster_name)" >> $GITHUB_ENV
+          echo "BACKEND_SERVICE=$(terraform output -raw backend_service_name)" >> $GITHUB_ENV
+          echo "FRONTEND_SERVICE=$(terraform output -raw frontend_service_name)" >> $GITHUB_ENV
+        
+  build_and_deploy_images:
+    name: Build and Deploy Container Images
+    needs: deploy_infrastructure
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
       
-      # Login to ECR
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
       - name: Login to Amazon ECR
-        if: github.ref == 'refs/heads/develop'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
       
-      # Build and push backend image
-      - name: Build and push API image
-        if: github.ref == 'refs/heads/develop'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      # Build and push the backend image
+      - name: Build and push backend image
         uses: docker/build-push-action@v4
         with:
           context: ./packages/dashboard/backend
           push: true
-          tags: ${{ env.BACKEND_ECR_URL }}:latest
+          tags: ${{ env.BACKEND_REPO }}:latest,${{ env.BACKEND_REPO }}:${{ github.sha }}
       
-      # Build and push frontend image
-      - name: Build and push Frontend image
-        if: github.ref == 'refs/heads/develop'
+      # Build and push the frontend image
+      - name: Build and push frontend image
         uses: docker/build-push-action@v4
         with:
           context: ./packages/dashboard/frontend
           push: true
-          tags: ${{ env.FRONTEND_ECR_URL }}:latest
+          tags: ${{ env.FRONTEND_REPO }}:latest,${{ env.FRONTEND_REPO }}:${{ github.sha }}
       
-      # Get the ECS service names from Terraform outputs
-      - name: Get ECS Service Names
-        if: github.ref == 'refs/heads/develop'
-        id: get-ecs-services
-        run: |
-          cd terraform/environments/test
-          CLUSTER_NAME=$(terraform output -raw cluster_name)
-          BACKEND_SERVICE=$(terraform output -raw backend_service_name)
-          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name)
-          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
-          echo "BACKEND_SERVICE=$BACKEND_SERVICE" >> $GITHUB_ENV
-          echo "FRONTEND_SERVICE=$FRONTEND_SERVICE" >> $GITHUB_ENV
-      
-      # Force update ECS services
+      # Update the ECS services with the new images
       - name: Force ECS service updates
-        if: github.ref == 'refs/heads/develop'
         run: |
           aws ecs update-service --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.BACKEND_SERVICE }} --force-new-deployment
           aws ecs update-service --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.FRONTEND_SERVICE }} --force-new-deployment
       
       # Wait for services to stabilize
       - name: Wait for services to stabilize
-        if: github.ref == 'refs/heads/develop'
         run: |
           aws ecs wait services-stable --cluster ${{ env.CLUSTER_NAME }} --services ${{ env.BACKEND_SERVICE }} ${{ env.FRONTEND_SERVICE }}
           
       # Output the app URL
-      - name: Output App URL
-        if: github.ref == 'refs/heads/develop'
+      - name: Get and output application URL
         run: |
           cd terraform/environments/test
-          echo "SpearPoint app is now available at: $(terraform output -raw frontend_url)"
+          APP_URL=$(terraform output -raw app_url)
+          echo "::notice::Application is now available at: ${APP_URL}"
+          echo "::notice::Credentials have been stored in AWS SSM Parameter Store as /spearpoint/test/db_password and /spearpoint/test/jwt_secret"

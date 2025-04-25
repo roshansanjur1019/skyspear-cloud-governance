@@ -1,40 +1,29 @@
-output "cluster_id" {
-  description = "ID of the ECS cluster"
-  value       = aws_ecs_cluster.main.id
-}
-
 output "cluster_name" {
-  description = "Name of the ECS cluster"
+  description = "The name of the ECS cluster"
   value       = aws_ecs_cluster.main.name
 }
 
-output "api_service_name" {
-  description = "Name of the API ECS service"
+output "backend_service_name" {
+  description = "The name of the backend ECS service"
   value       = aws_ecs_service.api.name
 }
 
-output "api_security_group_id" {
-  description = "ID of the security group for the API service"
-  value       = aws_security_group.api.id
+output "frontend_service_name" {
+  description = "The name of the frontend ECS service"
+  value       = aws_ecs_service.frontend.name
 }
 
-output "frontend_security_group_id" {
-  description = "ID of the security group for the frontend service"
-  value       = aws_security_group.frontend.id
+output "frontend_url" {
+  description = "The URL of the frontend application"
+  value       = "http://${aws_lb.main.dns_name}"
 }
 
-output "api_log_group_name" {
-  description = "Name of the CloudWatch log group for the API service"
-  value       = aws_cloudwatch_log_group.api.name
+output "api_url" {
+  description = "The URL of the API"
+  value       = "http://${aws_lb.main.dns_name}/api"
 }
 
-output "frontend_log_group_name" {
-  description = "Name of the CloudWatch log group for the frontend service"
-  value       = aws_cloudwatch_log_group.frontend.name
+output "load_balancer_dns" {
+  description = "The DNS name of the load balancer"
+  value       = aws_lb.main.dns_name
 }
-
-# If you add load balancer support, include those outputs here
-# output "api_load_balancer_dns" {
-#   description = "DNS name of the API load balancer"
-#   value       = aws_lb.api.dns_name
-# }
