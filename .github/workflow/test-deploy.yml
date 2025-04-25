@@ -32,8 +32,7 @@ jobs:
         run: |
           cd terraform/environments/test
           terraform plan -var="db_password=${{ secrets.DB_PASSWORD }}" \
-                        -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
-                        -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}"
+                        -var="jwt_secret=${{ secrets.JWT_SECRET }}"
       
       - name: Terraform Apply
         if: github.ref == 'refs/heads/develop'
@@ -41,28 +40,72 @@ jobs:
           cd terraform/environments/test
           terraform apply -var="db_password=${{ secrets.DB_PASSWORD }}" \
                          -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
-                         -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}" \
                          -auto-approve
       
+      # Get the ECR repository URLs from Terraform outputs
+      - name: Get ECR Repository URLs
+        if: github.ref == 'refs/heads/develop'
+        id: get-ecr-urls
+        run: |
+          cd terraform/environments/test
+          BACKEND_ECR_URL=$(terraform output -raw backend_repository_url)
+          FRONTEND_ECR_URL=$(terraform output -raw frontend_repository_url)
+          echo "BACKEND_ECR_URL=$BACKEND_ECR_URL" >> $GITHUB_ENV
+          echo "FRONTEND_ECR_URL=$FRONTEND_ECR_URL" >> $GITHUB_ENV
+      
+      # Login to ECR
       - name: Login to Amazon ECR
+        if: github.ref == 'refs/heads/develop'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
       
+      # Build and push backend image
       - name: Build and push API image
+        if: github.ref == 'refs/heads/develop'
         uses: docker/build-push-action@v4
         with:
-          context: ./packages/dashboard/backend-python
+          context: ./packages/dashboard/backend
           push: true
-          tags: ${{ secrets.ECR_REPOSITORY_URL }}/spearpoint-api:latest
+          tags: ${{ env.BACKEND_ECR_URL }}:latest
       
+      # Build and push frontend image
       - name: Build and push Frontend image
+        if: github.ref == 'refs/heads/develop'
         uses: docker/build-push-action@v4
         with:
           context: ./packages/dashboard/frontend
           push: true
-          tags: ${{ secrets.ECR_REPOSITORY_URL }}/spearpoint-frontend:latest
+          tags: ${{ env.FRONTEND_ECR_URL }}:latest
       
-      - name: Force ECS service updates
+      # Get the ECS service names from Terraform outputs
+      - name: Get ECS Service Names
+        if: github.ref == 'refs/heads/develop'
+        id: get-ecs-services
         run: |
-          aws ecs update-service --cluster spearpoint-test --service spearpoint-test-api --force-new-deployment
-          aws ecs update-service --cluster spearpoint-test --service spearpoint-test-frontend --force-new-deployment
+          cd terraform/environments/test
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          BACKEND_SERVICE=$(terraform output -raw backend_service_name)
+          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name)
+          echo "CLUSTER_NAME=$CLUSTER_NAME" >> $GITHUB_ENV
+          echo "BACKEND_SERVICE=$BACKEND_SERVICE" >> $GITHUB_ENV
+          echo "FRONTEND_SERVICE=$FRONTEND_SERVICE" >> $GITHUB_ENV
+      
+      # Force update ECS services
+      - name: Force ECS service updates
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          aws ecs update-service --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.BACKEND_SERVICE }} --force-new-deployment
+          aws ecs update-service --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.FRONTEND_SERVICE }} --force-new-deployment
+      
+      # Wait for services to stabilize
+      - name: Wait for services to stabilize
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          aws ecs wait services-stable --cluster ${{ env.CLUSTER_NAME }} --services ${{ env.BACKEND_SERVICE }} ${{ env.FRONTEND_SERVICE }}
+          
+      # Output the app URL
+      - name: Output App URL
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          cd terraform/environments/test
+          echo "SpearPoint app is now available at: $(terraform output -raw frontend_url)"
