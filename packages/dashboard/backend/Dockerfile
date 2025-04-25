@@ -1,19 +1,7 @@
-FROM node:18-alpine
-
+FROM python:3.12-slim
 WORKDIR /app
-
-# Install dependencies
-COPY package*.json ./
-RUN npm install
-
-# Copy source code (in development we'll use volumes instead)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-
-# Expose port for API
 EXPOSE 3001
-
-# Set environment to development
-ENV NODE_ENV=development
-
-# Start in development mode with hot-reloading
-CMD ["npm", "run", "dev"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3001"]

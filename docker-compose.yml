@@ -1,4 +1,4 @@
-# Docker Compose for Development Environment
+# Docker Compose for Development Environment with Python Backend
 # docker-compose.yml
 
 version: '3.8'
@@ -17,16 +17,15 @@ services:
     networks:
       - spearpoint-network
 
-  # Backend API
+  # Python Backend API (FastAPI)
   api:
     build:
-      context: ./packages/dashboard/backend
-      dockerfile: Dockerfile.dev
+      context: ./packages/dashboard/backend-python
+      dockerfile: Dockerfile
     ports:
       - "3001:3001"
     volumes:
-      - ./packages/dashboard/backend:/app
-      - /app/node_modules
+      - ./packages/dashboard/backend-python:/app
     depends_on:
       - mongodb
     environment:
@@ -34,6 +33,7 @@ services:
       - PORT=3001
       - DATABASE_URL=mongodb://spearpoint:spearpoint_dev_pass@mongodb:27017/spearpoint?authSource=admin
       - JWT_SECRET=dev_secret_key_change_in_production
+      - CORS_ORIGIN=http://localhost:3000
     networks:
       - spearpoint-network
 
