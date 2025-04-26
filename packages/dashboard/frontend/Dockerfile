@@ -1,37 +1,22 @@
-FROM node:18-alpine as builder
-
-WORKDIR /app
-
-# Copy package.json and package-lock.json (if it exists)
-COPY package*.json ./
-
-# Install dependencies with more verbose output and retry logic
-RUN npm config set loglevel verbose && \
-    npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
-
-# Copy source code
-COPY . .
-
-# Build the application
-RUN npm run build
-
-# Production image using nginx to serve static files
 FROM nginx:alpine
 
-# Install envsubst command (it's in the gettext package)
+# Install gettext for envsubst
 RUN apk add --no-cache gettext
 
-# Copy nginx configuration template and entrypoint
+# Copy nginx configuration template
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY entrypoint.sh /entrypoint.sh
 
-# Make entrypoint executable
-RUN chmod +x /entrypoint.sh
+# Create entrypoint script
+RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'envsubst "\$BACKEND_URL" < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf' >> /entrypoint.sh && \
+    echo 'exec nginx -g "daemon off;"' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
-# Copy built application from builder stage
-COPY --from=builder /app/build /usr/share/nginx/html
+# Create a simple HTML page
+RUN mkdir -p /usr/share/nginx/html && \
+    echo '<html><body><h1>SpearPoint Cloud Governance</h1><p>Temporary placeholder page.</p></body></html>' > /usr/share/nginx/html/index.html
 
-# Set default backend URL (will be overridden by environment variable)
+# Set default backend URL
 ENV BACKEND_URL=http://backend:3001
 
 # Expose port 80
