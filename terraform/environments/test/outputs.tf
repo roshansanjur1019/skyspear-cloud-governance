@@ -13,6 +13,7 @@ output "private_subnet_ids" {
 output "db_endpoint" {
   description = "MongoDB connection endpoint"
   value       = module.mongodb.connection_string
+  sensitive  = true
 }
 
 # ECR Outputs
