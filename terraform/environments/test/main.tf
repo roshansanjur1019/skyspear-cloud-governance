@@ -11,7 +11,7 @@ terraform {
   }
   
   backend "s3" {
-    bucket         = "spearpoint-terraform-state"
+    bucket         = "spearpoint-terraform-states"
     key            = "test/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
