@@ -15,6 +15,10 @@ terraform {
     key            = "test/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
+    # Replace deprecated dynamodb_table with this alternative if supported by your Terraform version
+    # If this doesn't work, you can keep using dynamodb_table for now
+    dynamodb_endpoint = "https://dynamodb.us-east-1.amazonaws.com"
+    # Keeping the original line as a fallback
     dynamodb_table = "spearpoint-terraform-locks"
   }
 }
@@ -59,8 +63,11 @@ module "vpc" {
   source = "../../modules/vpc"
   
   environment = var.environment
-  vpc_cidr    = var.vpc_cidr
-  azs         = var.availability_zones
+  vpc_cidr    = var.vpc_cidr       # This is correct
+  
+  # Add these required parameters
+  project_name = var.project_name
+  availability_zones = var.availability_zones  # Use this instead of 'azs'
 }
 
 # Database
@@ -70,9 +77,19 @@ module "mongodb" {
   environment       = var.environment
   vpc_id            = module.vpc.vpc_id
   subnet_ids        = module.vpc.private_subnet_ids
-  security_group_id = module.vpc.mongodb_security_group_id
   db_password       = var.db_password
+  
+  # Fix this line to match the variable name you're using
+  vpc_cidr_block    = var.vpc_cidr  # Use the same variable as in the VPC module
+  project_name      = var.project_name
 }
+  
+  # If your MongoDB module has a different way to specify security groups,
+  # you might need to add it here. For example:
+  # security_groups  = [module.vpc.mongodb_security_group_id]
+  # or
+  # vpc_security_group_ids = [module.vpc.mongodb_security_group_id]
+
 
 # ECS Cluster and Services
 module "ecs" {
