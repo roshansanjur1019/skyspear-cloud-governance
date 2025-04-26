@@ -28,8 +28,9 @@ jobs:
       - name: Generate random passwords
         id: generate-passwords
         run: |
-          DB_PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 16)
-          JWT_SECRET=$(openssl rand -base64 32)
+          # Use hex encoding instead of base64 to avoid special characters
+          DB_PASSWORD=$(openssl rand -hex 16)
+          JWT_SECRET=$(openssl rand -hex 32)
           echo "DB_PASSWORD=${DB_PASSWORD}" >> $GITHUB_ENV
           echo "JWT_SECRET=${JWT_SECRET}" >> $GITHUB_ENV
           
@@ -69,18 +70,15 @@ jobs:
                          -auto-approve
       
       - name: Get Infrastructure Outputs
-        id: terraform-outputs
+        id: tf-outputs
         run: |
           cd terraform/environments/test
-          # Store the raw outputs without any processing first
-          BACKEND_REPO=$(terraform output -raw backend_repository_url)
-          FRONTEND_REPO=$(terraform output -raw frontend_repository_url)
-          # Then set the GitHub environment variables, escaping any special characters
-          echo "BACKEND_REPO=${BACKEND_REPO}" >> $GITHUB_ENV
-          echo "FRONTEND_REPO=${FRONTEND_REPO}" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_ENV
-          echo "BACKEND_SERVICE=$(terraform output -raw backend_service_name)" >> $GITHUB_ENV
-          echo "FRONTEND_SERVICE=$(terraform output -raw frontend_service_name)" >> $GITHUB_ENV
+          # Save outputs to GitHub step outputs to prevent shell escaping issues
+          echo "backend_repo=$(terraform output -raw backend_repository_url)" >> $GITHUB_OUTPUT
+          echo "frontend_repo=$(terraform output -raw frontend_repository_url)" >> $GITHUB_OUTPUT
+          echo "cluster_name=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_OUTPUT
+          echo "backend_service=$(terraform output -raw backend_service_name)" >> $GITHUB_OUTPUT
+          echo "frontend_service=$(terraform output -raw frontend_service_name)" >> $GITHUB_OUTPUT
         
   build_and_deploy_images:
     name: Build and Deploy Container Images
@@ -105,32 +103,71 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       
+      # Access terraform outputs from previous job
+      - name: Access Terraform Output Values
+        env:
+          BACKEND_REPO: ${{ needs.deploy_infrastructure.outputs.backend_repo }}
+          FRONTEND_REPO: ${{ needs.deploy_infrastructure.outputs.frontend_repo }}
+          CLUSTER_NAME: ${{ needs.deploy_infrastructure.outputs.cluster_name }}
+          BACKEND_SERVICE: ${{ needs.deploy_infrastructure.outputs.backend_service }}
+          FRONTEND_SERVICE: ${{ needs.deploy_infrastructure.outputs.frontend_service }}
+        run: |
+          # First, fetch the values from the previous job by calling terraform again
+          cd terraform/environments/test
+          terraform init -input=false
+          BACKEND_REPO=$(terraform output -raw backend_repository_url)
+          FRONTEND_REPO=$(terraform output -raw frontend_repository_url)
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
+          BACKEND_SERVICE=$(terraform output -raw backend_service_name)
+          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name)
+          
+          # Store the values for later steps
+          echo "BACKEND_REPO=${BACKEND_REPO}" >> $GITHUB_ENV
+          echo "FRONTEND_REPO=${FRONTEND_REPO}" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=${CLUSTER_NAME}" >> $GITHUB_ENV
+          echo "BACKEND_SERVICE=${BACKEND_SERVICE}" >> $GITHUB_ENV
+          echo "FRONTEND_SERVICE=${FRONTEND_SERVICE}" >> $GITHUB_ENV
+          
+          # Debug: Print values to verify
+          echo "Debug - Repository URLs and services:"
+          echo "BACKEND_REPO: ${BACKEND_REPO}"
+          echo "FRONTEND_REPO: ${FRONTEND_REPO}"
+          echo "CLUSTER_NAME: ${CLUSTER_NAME}"
+          echo "BACKEND_SERVICE: ${BACKEND_SERVICE}"
+          echo "FRONTEND_SERVICE: ${FRONTEND_SERVICE}"
+      
       # Build and push the backend image
       - name: Build and push backend image
         uses: docker/build-push-action@v4
         with:
           context: ./packages/dashboard/backend
+          file: ./packages/dashboard/backend/Dockerfile
           push: true
-          tags: ${{ env.BACKEND_REPO }}:latest,${{ env.BACKEND_REPO }}:${{ github.sha }}
+          tags: |
+            ${{ env.BACKEND_REPO }}:latest
+            ${{ env.BACKEND_REPO }}:${{ github.sha }}
       
       # Build and push the frontend image
       - name: Build and push frontend image
         uses: docker/build-push-action@v4
         with:
           context: ./packages/dashboard/frontend
+          file: ./packages/dashboard/frontend/Dockerfile
           push: true
-          tags: ${{ env.FRONTEND_REPO }}:latest,${{ env.FRONTEND_REPO }}:${{ github.sha }}
+          tags: |
+            ${{ env.FRONTEND_REPO }}:latest
+            ${{ env.FRONTEND_REPO }}:${{ github.sha }}
       
       # Update the ECS services with the new images
       - name: Force ECS service updates
         run: |
-          aws ecs update-service --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.BACKEND_SERVICE }} --force-new-deployment
-          aws ecs update-service --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.FRONTEND_SERVICE }} --force-new-deployment
+          aws ecs update-service --cluster ${CLUSTER_NAME} --service ${BACKEND_SERVICE} --force-new-deployment
+          aws ecs update-service --cluster ${CLUSTER_NAME} --service ${FRONTEND_SERVICE} --force-new-deployment
       
       # Wait for services to stabilize
       - name: Wait for services to stabilize
         run: |
-          aws ecs wait services-stable --cluster ${{ env.CLUSTER_NAME }} --services ${{ env.BACKEND_SERVICE }} ${{ env.FRONTEND_SERVICE }}
+          aws ecs wait services-stable --cluster ${CLUSTER_NAME} --services ${BACKEND_SERVICE} ${FRONTEND_SERVICE}
           
       # Output the app URL
       - name: Get and output application URL
