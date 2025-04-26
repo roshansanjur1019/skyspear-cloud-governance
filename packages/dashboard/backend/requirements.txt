@@ -1,6 +1,4 @@
-# Create requirements.txt in the backend directory
-cd packages/dashboard/backend
-echo "fastapi==0.100.0
+fastapi==0.100.0
 uvicorn==0.23.2
 motor==3.2.0
 pymongo==4.4.1
@@ -9,4 +7,4 @@ passlib==1.7.4
 python-dotenv==1.0.0
 bcrypt==4.0.1
 python-multipart==0.0.6
-email-validator==2.0.0" > requirements.txt
+email-validator==2.0.0
