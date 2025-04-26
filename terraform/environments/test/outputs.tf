@@ -1,40 +1,50 @@
+# VPC Outputs
 output "vpc_id" {
   description = "The ID of the VPC"
-  value       = module.network.vpc_id
+  value       = module.vpc.vpc_id
 }
 
+output "private_subnet_ids" {
+  description = "List of private subnet IDs"
+  value       = module.vpc.private_subnet_ids
+}
+
+# MongoDB Outputs
 output "db_endpoint" {
-  description = "The endpoint of the DocumentDB cluster"
-  value       = module.database.endpoint
+  description = "MongoDB connection endpoint"
+  value       = module.mongodb.connection_string
 }
 
+# ECR Outputs
+output "backend_repository_url" {
+  description = "The URL of the backend ECR repository"
+  value       = aws_ecr_repository.backend.repository_url
+}
+
+output "frontend_repository_url" {
+  description = "The URL of the frontend ECR repository"
+  value       = aws_ecr_repository.frontend.repository_url
+}
+
+# ECS Outputs
+# Check what outputs your ECS module actually provides and use those
 output "ecs_cluster_name" {
   description = "Name of the ECS cluster"
   value       = module.ecs.cluster_name
 }
 
-output "api_service_name" {
-  description = "Name of the API ECS service"
-  value       = module.ecs.api_service_name
+output "backend_service_name" {
+  description = "Name of the backend ECS service"
+  value       = module.ecs.backend_service_name
 }
 
-# If you add load balancer support, you might want to include those endpoints
-# output "api_url" {
-#   description = "URL of the API service"
-#   value       = "http://${module.ecs.api_load_balancer_dns}"
-# }
-
-# output "frontend_url" {
-#   description = "URL of the frontend application"
-#   value       = "http://${module.ecs.frontend_load_balancer_dns}"
-# }
-
-output "region" {
-  description = "AWS region"
-  value       = var.aws_region
+output "frontend_service_name" {
+  description = "Name of the frontend ECS service"
+  value       = module.ecs.frontend_service_name
 }
 
-output "environment" {
-  description = "Environment name"
-  value       = var.environment
+# Application URL
+output "app_url" {
+  description = "URL to access the application"
+  value       = module.ecs.app_url
 }
