@@ -72,8 +72,10 @@ jobs:
         id: terraform-outputs
         run: |
           cd terraform/environments/test
-          BACKEND_REPO=$(terraform output -raw backend_repository_url | sed 's/:/\\:/g')
-          FRONTEND_REPO=$(terraform output -raw frontend_repository_url | sed 's/:/\\:/g')
+          # Store the raw outputs without any processing first
+          BACKEND_REPO=$(terraform output -raw backend_repository_url)
+          FRONTEND_REPO=$(terraform output -raw frontend_repository_url)
+          # Then set the GitHub environment variables, escaping any special characters
           echo "BACKEND_REPO=${BACKEND_REPO}" >> $GITHUB_ENV
           echo "FRONTEND_REPO=${FRONTEND_REPO}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_ENV
