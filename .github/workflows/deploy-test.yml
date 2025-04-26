@@ -9,6 +9,13 @@ jobs:
   deploy_infrastructure:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
+    outputs:
+      backend_repo: ${{ steps.output-urls.outputs.backend_repo }}
+      frontend_repo: ${{ steps.output-urls.outputs.frontend_repo }}
+      cluster_name: ${{ steps.output-urls.outputs.cluster_name }}
+      backend_service: ${{ steps.output-urls.outputs.backend_service }}
+      frontend_service: ${{ steps.output-urls.outputs.frontend_service }}
+      app_url: ${{ steps.output-urls.outputs.app_url }}
     
     steps:
       - name: Checkout code
@@ -73,6 +80,18 @@ jobs:
                          -var="jwt_secret=${JWT_SECRET}" \
                          -var="aws_account_id=${AWS_ACCOUNT_ID}" \
                          -auto-approve
+      
+      # Save terraform outputs as job outputs
+      - name: Save Terraform Outputs
+        id: output-urls
+        run: |
+          cd terraform/environments/test
+          echo "backend_repo=$(terraform output -raw backend_repository_url)" >> $GITHUB_OUTPUT
+          echo "frontend_repo=$(terraform output -raw frontend_repository_url)" >> $GITHUB_OUTPUT
+          echo "cluster_name=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_OUTPUT
+          echo "backend_service=$(terraform output -raw backend_service_name)" >> $GITHUB_OUTPUT
+          echo "frontend_service=$(terraform output -raw frontend_service_name)" >> $GITHUB_OUTPUT
+          echo "app_url=$(terraform output -raw app_url)" >> $GITHUB_OUTPUT
   
   build_and_deploy_images:
     name: Build and Deploy Container Images
@@ -97,56 +116,48 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       
-      # Build and push the backend image - directly using terraform output
+      # Display the values from previous job for verification
+      - name: Debug Output Values
+        run: |
+          echo "BACKEND_REPO: ${{ needs.deploy_infrastructure.outputs.backend_repo }}"
+          echo "FRONTEND_REPO: ${{ needs.deploy_infrastructure.outputs.frontend_repo }}"
+          echo "CLUSTER_NAME: ${{ needs.deploy_infrastructure.outputs.cluster_name }}"
+          echo "BACKEND_SERVICE: ${{ needs.deploy_infrastructure.outputs.backend_service }}"
+          echo "FRONTEND_SERVICE: ${{ needs.deploy_infrastructure.outputs.frontend_service }}"
+      
+      # Build and push the backend image using outputs from first job
       - name: Build and push backend image
-        run: |
-          cd terraform/environments/test
-          terraform init -input=false
-          BACKEND_REPO=$(terraform output -raw backend_repository_url)
-          cd ../../packages/dashboard/backend
-          docker build -t ${BACKEND_REPO}:latest -t ${BACKEND_REPO}:${{ github.sha }} .
-          docker push ${BACKEND_REPO}:latest
-          docker push ${BACKEND_REPO}:${{ github.sha }}
+        uses: docker/build-push-action@v4
+        with:
+          context: ./packages/dashboard/backend
+          push: true
+          tags: |
+            ${{ needs.deploy_infrastructure.outputs.backend_repo }}:latest
+            ${{ needs.deploy_infrastructure.outputs.backend_repo }}:${{ github.sha }}
       
-      # Build and push the frontend image - directly using terraform output
+      # Build and push the frontend image using outputs from first job
       - name: Build and push frontend image
-        run: |
-          cd terraform/environments/test
-          terraform init -input=false
-          FRONTEND_REPO=$(terraform output -raw frontend_repository_url)
-          cd ../../packages/dashboard/frontend
-          docker build -t ${FRONTEND_REPO}:latest -t ${FRONTEND_REPO}:${{ github.sha }} .
-          docker push ${FRONTEND_REPO}:latest
-          docker push ${FRONTEND_REPO}:${{ github.sha }}
+        uses: docker/build-push-action@v4
+        with:
+          context: ./packages/dashboard/frontend
+          push: true
+          tags: |
+            ${{ needs.deploy_infrastructure.outputs.frontend_repo }}:latest
+            ${{ needs.deploy_infrastructure.outputs.frontend_repo }}:${{ github.sha }}
       
-      # Update the ECS services - directly using terraform output
+      # Update the ECS services using outputs from first job
       - name: Force ECS service updates
         run: |
-          cd terraform/environments/test
-          terraform init -input=false
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
-          BACKEND_SERVICE=$(terraform output -raw backend_service_name)
-          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name)
-          
-          aws ecs update-service --cluster ${CLUSTER_NAME} --service ${BACKEND_SERVICE} --force-new-deployment
-          aws ecs update-service --cluster ${CLUSTER_NAME} --service ${FRONTEND_SERVICE} --force-new-deployment
+          aws ecs update-service --cluster ${{ needs.deploy_infrastructure.outputs.cluster_name }} --service ${{ needs.deploy_infrastructure.outputs.backend_service }} --force-new-deployment
+          aws ecs update-service --cluster ${{ needs.deploy_infrastructure.outputs.cluster_name }} --service ${{ needs.deploy_infrastructure.outputs.frontend_service }} --force-new-deployment
       
       # Wait for services to stabilize
       - name: Wait for services to stabilize
         run: |
-          cd terraform/environments/test
-          terraform init -input=false
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
-          BACKEND_SERVICE=$(terraform output -raw backend_service_name)
-          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name)
-          
-          aws ecs wait services-stable --cluster ${CLUSTER_NAME} --services ${BACKEND_SERVICE} ${FRONTEND_SERVICE}
+          aws ecs wait services-stable --cluster ${{ needs.deploy_infrastructure.outputs.cluster_name }} --services ${{ needs.deploy_infrastructure.outputs.backend_service }} ${{ needs.deploy_infrastructure.outputs.frontend_service }}
           
       # Output the app URL
       - name: Get and output application URL
         run: |
-          cd terraform/environments/test
-          terraform init -input=false
-          APP_URL=$(terraform output -raw app_url)
-          echo "::notice::Application is now available at: ${APP_URL}"
+          echo "::notice::Application is now available at: ${{ needs.deploy_infrastructure.outputs.app_url }}"
           echo "::notice::Credentials have been stored in AWS SSM Parameter Store as /spearpoint/test/db_password and /spearpoint/test/jwt_secret"
