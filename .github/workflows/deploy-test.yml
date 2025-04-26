@@ -81,6 +81,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       
+      # Get the backend URL for frontend configuration
+      - name: Get Backend Service URL
+        id: backend-url
+        run: |
+          # Assuming you have the internal ALB DNS name available or using service discovery
+          # For testing, you can hardcode a value or get it from Terraform outputs
+          BACKEND_URL="http://${{ secrets.ECS_CLUSTER_NAME }}-backend.internal:3001"
+          echo "backend_url=${BACKEND_URL}" >> $GITHUB_OUTPUT
+      
       # Build and push the backend image using secrets
       - name: Build and push backend image
         run: |
@@ -88,11 +97,20 @@ jobs:
           ACCOUNT_ID="${{ steps.aws-account.outputs.account_id }}"
           AWS_REGION="${{ secrets.AWS_REGION }}"
           
+          # Ensure requirements.txt exists and is formatted correctly
+          cd packages/dashboard/backend
+          
+          # Check if it's a script that creates requirements.txt
+          if grep -q "echo" requirements.txt; then
+            # It's a script, so execute it to create the actual requirements.txt
+            chmod +x requirements.txt
+            ./requirements.txt
+          fi
+          
           # Construct the ECR URL using the secret repo name
           BACKEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ secrets.BACKEND_ECR_REPO_NAME }}"
           
           # Build and push using Docker directly
-          cd packages/dashboard/backend
           docker build -t ${BACKEND_REPO}:latest -t ${BACKEND_REPO}:${{ github.sha }} .
           docker push ${BACKEND_REPO}:latest
           docker push ${BACKEND_REPO}:${{ github.sha }}
@@ -107,9 +125,17 @@ jobs:
           # Construct the ECR URL using the secret repo name
           FRONTEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ secrets.FRONTEND_ECR_REPO_NAME }}"
           
-          # Build and push using Docker directly
+          # Set appropriate permissions on the entrypoint.sh
           cd packages/dashboard/frontend
-          docker build -t ${FRONTEND_REPO}:latest -t ${FRONTEND_REPO}:${{ github.sha }} .
+          if [ -f "entrypoint.sh" ]; then
+            chmod +x entrypoint.sh
+          fi
+          
+          # Build and push using Docker directly with the backend URL as a build arg
+          docker build \
+            --build-arg BACKEND_URL="${{ steps.backend-url.outputs.backend_url }}" \
+            -t ${FRONTEND_REPO}:latest \
+            -t ${FRONTEND_REPO}:${{ github.sha }} .
           docker push ${FRONTEND_REPO}:latest
           docker push ${FRONTEND_REPO}:${{ github.sha }}
       

@@ -13,14 +13,21 @@ RUN npm run build
 # Production image using nginx to serve static files
 FROM nginx:alpine
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx configuration template and entrypoint
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY entrypoint.sh /entrypoint.sh
+
+# Make entrypoint executable
+RUN chmod +x /entrypoint.sh
 
 # Copy built application from builder stage
 COPY --from=builder /app/build /usr/share/nginx/html
 
+# Set default backend URL (will be overridden by environment variable)
+ENV BACKEND_URL=http://backend:3001
+
 # Expose port 80
 EXPOSE 80
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Set the entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
