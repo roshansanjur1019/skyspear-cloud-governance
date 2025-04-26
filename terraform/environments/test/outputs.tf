@@ -42,9 +42,3 @@ output "frontend_service_name" {
   description = "Name of the frontend ECS service"
   value       = module.ecs.frontend_service_name
 }
-
-# Application URL
-output "app_url" {
-  description = "URL to access the application"
-  value       = module.ecs.app_url
-}
