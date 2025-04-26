@@ -2,16 +2,24 @@ FROM node:18-alpine as builder
 
 WORKDIR /app
 
-# Copy package.json and install dependencies
+# Copy package.json and package-lock.json (if it exists)
 COPY package*.json ./
-RUN npm ci
 
-# Copy source code and build the application
+# Install dependencies with more verbose output and retry logic
+RUN npm config set loglevel verbose && \
+    npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
+
+# Copy source code
 COPY . .
+
+# Build the application
 RUN npm run build
 
 # Production image using nginx to serve static files
 FROM nginx:alpine
+
+# Install envsubst command (it's in the gettext package)
+RUN apk add --no-cache gettext
 
 # Copy nginx configuration template and entrypoint
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
