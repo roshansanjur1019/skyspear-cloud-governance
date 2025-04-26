@@ -28,7 +28,7 @@ jobs:
       - name: Generate random passwords
         id: generate-passwords
         run: |
-          DB_PASSWORD=$(openssl rand -base64 16)
+          DB_PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 16)
           JWT_SECRET=$(openssl rand -base64 32)
           echo "DB_PASSWORD=${DB_PASSWORD}" >> $GITHUB_ENV
           echo "JWT_SECRET=${JWT_SECRET}" >> $GITHUB_ENV
