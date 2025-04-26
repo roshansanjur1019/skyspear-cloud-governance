@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy_infrastructure:
-    name: Deploy Infrastructure
+  deploy_and_build:
+    name: Deploy Infrastructure and Build Images
     runs-on: ubuntu-latest
     
     steps:
@@ -39,7 +39,7 @@ jobs:
         id: aws-account
         run: |
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> $GITHUB_ENV
+          echo "account_id=${AWS_ACCOUNT_ID}" >> $GITHUB_OUTPUT
       
       - name: Terraform Init
         run: |
@@ -60,7 +60,7 @@ jobs:
           
           terraform plan -var="db_password=${DB_PASSWORD}" \
                         -var="jwt_secret=${JWT_SECRET}" \
-                        -var="aws_account_id=${AWS_ACCOUNT_ID}"
+                        -var="aws_account_id=${{ steps.aws-account.outputs.account_id }}"
       
       - name: Terraform Apply
         run: |
@@ -71,56 +71,8 @@ jobs:
           
           terraform apply -var="db_password=${DB_PASSWORD}" \
                          -var="jwt_secret=${JWT_SECRET}" \
-                         -var="aws_account_id=${AWS_ACCOUNT_ID}" \
+                         -var="aws_account_id=${{ steps.aws-account.outputs.account_id }}" \
                          -auto-approve
-      
-      # Store key resource names in files that can be passed between jobs
-      - name: Store resource names for second job
-        run: |
-          # Create a directory for shared files
-          mkdir -p /tmp/shared
-          
-          # Hard-coding the values as fallbacks if terraform output fails
-          echo "spearpoint-test-cluster" > /tmp/shared/cluster_name.txt
-          echo "spearpoint-test-backend" > /tmp/shared/backend_service.txt
-          echo "spearpoint-test-frontend" > /tmp/shared/frontend_service.txt
-          
-          # Try to get actual values from terraform if possible
-          cd terraform/environments/test
-          terraform output -raw ecs_cluster_name > /tmp/shared/cluster_name.txt || true
-          terraform output -raw backend_service_name > /tmp/shared/backend_service.txt || true
-          terraform output -raw frontend_service_name > /tmp/shared/frontend_service.txt || true
-          
-          # Store AWS region
-          aws configure get region > /tmp/shared/aws_region.txt
-          
-          # Upload the files as artifacts
-          echo "Files created for sharing between jobs:"
-          ls -la /tmp/shared/
-          
-      # Upload the resource names as artifacts for the next job
-      - name: Upload shared resources
-        uses: actions/upload-artifact@v3
-        with:
-          name: shared-resources
-          path: /tmp/shared/
-          retention-days: 1
-  
-  build_and_deploy_images:
-    name: Build and Deploy Container Images
-    needs: deploy_infrastructure
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
       
       - name: Login to Amazon ECR
         id: login-ecr
@@ -129,19 +81,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       
-      # Download shared resources from previous job
-      - name: Download shared resources
-        uses: actions/download-artifact@v3
-        with:
-          name: shared-resources
-          path: /tmp/shared
-      
       # Build and push the backend image
       - name: Build and push backend image
         run: |
-          # Get AWS account ID
-          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-          AWS_REGION=$(cat /tmp/shared/aws_region.txt)
+          # Get AWS account ID and region
+          ACCOUNT_ID="${{ steps.aws-account.outputs.account_id }}"
+          AWS_REGION=$(aws configure get region)
           
           # Construct the ECR URL
           BACKEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/spearpoint-test-backend"
@@ -155,9 +100,9 @@ jobs:
       # Build and push the frontend image
       - name: Build and push frontend image
         run: |
-          # Get AWS account ID
-          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-          AWS_REGION=$(cat /tmp/shared/aws_region.txt)
+          # Get AWS account ID and region
+          ACCOUNT_ID="${{ steps.aws-account.outputs.account_id }}"
+          AWS_REGION=$(aws configure get region)
           
           # Construct the ECR URL
           FRONTEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/spearpoint-test-frontend"
@@ -171,9 +116,13 @@ jobs:
       # Update the ECS services
       - name: Force ECS service updates
         run: |
-          CLUSTER_NAME=$(cat /tmp/shared/cluster_name.txt)
-          BACKEND_SERVICE=$(cat /tmp/shared/backend_service.txt)
-          FRONTEND_SERVICE=$(cat /tmp/shared/frontend_service.txt)
+          cd terraform/environments/test
+          
+          # Try to get actual values from terraform if possible
+          # Use fallback values if terraform output fails
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "spearpoint-test-cluster")
+          BACKEND_SERVICE=$(terraform output -raw backend_service_name 2>/dev/null || echo "spearpoint-test-backend")
+          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name 2>/dev/null || echo "spearpoint-test-frontend")
           
           echo "Updating services in cluster: ${CLUSTER_NAME}"
           echo "Backend service: ${BACKEND_SERVICE}"
@@ -185,9 +134,13 @@ jobs:
       # Wait for services to stabilize
       - name: Wait for services to stabilize
         run: |
-          CLUSTER_NAME=$(cat /tmp/shared/cluster_name.txt)
-          BACKEND_SERVICE=$(cat /tmp/shared/backend_service.txt)
-          FRONTEND_SERVICE=$(cat /tmp/shared/frontend_service.txt)
+          cd terraform/environments/test
+          
+          # Try to get actual values from terraform if possible
+          # Use fallback values if terraform output fails
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "spearpoint-test-cluster")
+          BACKEND_SERVICE=$(terraform output -raw backend_service_name 2>/dev/null || echo "spearpoint-test-backend")
+          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name 2>/dev/null || echo "spearpoint-test-frontend")
           
           aws ecs wait services-stable --cluster ${CLUSTER_NAME} --services ${BACKEND_SERVICE} ${FRONTEND_SERVICE}
           
