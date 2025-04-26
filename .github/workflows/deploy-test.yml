@@ -81,15 +81,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       
-      # Build and push the backend image
+      # Build and push the backend image using secrets
       - name: Build and push backend image
         run: |
           # Get AWS account ID and region
           ACCOUNT_ID="${{ steps.aws-account.outputs.account_id }}"
-          AWS_REGION=$(aws configure get region)
+          AWS_REGION="${{ secrets.AWS_REGION }}"
           
-          # Construct the ECR URL
-          BACKEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/spearpoint-test-backend"
+          # Construct the ECR URL using the secret repo name
+          BACKEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ secrets.BACKEND_ECR_REPO_NAME }}"
           
           # Build and push using Docker directly
           cd packages/dashboard/backend
@@ -97,15 +97,15 @@ jobs:
           docker push ${BACKEND_REPO}:latest
           docker push ${BACKEND_REPO}:${{ github.sha }}
       
-      # Build and push the frontend image
+      # Build and push the frontend image using secrets
       - name: Build and push frontend image
         run: |
           # Get AWS account ID and region
           ACCOUNT_ID="${{ steps.aws-account.outputs.account_id }}"
-          AWS_REGION=$(aws configure get region)
+          AWS_REGION="${{ secrets.AWS_REGION }}"
           
-          # Construct the ECR URL
-          FRONTEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/spearpoint-test-frontend"
+          # Construct the ECR URL using the secret repo name
+          FRONTEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ secrets.FRONTEND_ECR_REPO_NAME }}"
           
           # Build and push using Docker directly
           cd packages/dashboard/frontend
@@ -113,36 +113,18 @@ jobs:
           docker push ${FRONTEND_REPO}:latest
           docker push ${FRONTEND_REPO}:${{ github.sha }}
       
-      # Update the ECS services
+      # Update the ECS services using secrets
       - name: Force ECS service updates
         run: |
-          cd terraform/environments/test
-          
-          # Try to get actual values from terraform if possible
-          # Use fallback values if terraform output fails
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "spearpoint-test-cluster")
-          BACKEND_SERVICE=$(terraform output -raw backend_service_name 2>/dev/null || echo "spearpoint-test-backend")
-          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name 2>/dev/null || echo "spearpoint-test-frontend")
-          
-          echo "Updating services in cluster: ${CLUSTER_NAME}"
-          echo "Backend service: ${BACKEND_SERVICE}"
-          echo "Frontend service: ${FRONTEND_SERVICE}"
-          
-          aws ecs update-service --cluster ${CLUSTER_NAME} --service ${BACKEND_SERVICE} --force-new-deployment
-          aws ecs update-service --cluster ${CLUSTER_NAME} --service ${FRONTEND_SERVICE} --force-new-deployment
+          # Use the secrets directly
+          aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER_NAME }} --service ${{ secrets.ECS_BACKEND_SERVICE }} --force-new-deployment
+          aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER_NAME }} --service ${{ secrets.ECS_FRONTEND_SERVICE }} --force-new-deployment
       
-      # Wait for services to stabilize
+      # Wait for services to stabilize using secrets
       - name: Wait for services to stabilize
         run: |
-          cd terraform/environments/test
-          
-          # Try to get actual values from terraform if possible
-          # Use fallback values if terraform output fails
-          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "spearpoint-test-cluster")
-          BACKEND_SERVICE=$(terraform output -raw backend_service_name 2>/dev/null || echo "spearpoint-test-backend")
-          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name 2>/dev/null || echo "spearpoint-test-frontend")
-          
-          aws ecs wait services-stable --cluster ${CLUSTER_NAME} --services ${BACKEND_SERVICE} ${FRONTEND_SERVICE}
+          # Use the secrets directly
+          aws ecs wait services-stable --cluster ${{ secrets.ECS_CLUSTER_NAME }} --services ${{ secrets.ECS_BACKEND_SERVICE }} ${{ secrets.ECS_FRONTEND_SERVICE }}
           
       # Output deployment complete
       - name: Deployment complete
