@@ -28,9 +28,8 @@ if "docdb" in MONGODB_URL or os.getenv("USE_SSL", "false").lower() == "true":
     
     client = motor.motor_asyncio.AsyncIOMotorClient(
         MONGODB_URL,
-        ssl=True,
-        ssl_ca_certs=None,
-        ssl_cert_reqs=ssl.CERT_NONE,
+        tls=True,
+        tlsAllowInvalidCertificates=True,
         retryWrites=False,  # DocumentDB doesn't support retryWrites
         serverSelectionTimeoutMS=5000
     )
