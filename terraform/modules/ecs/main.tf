@@ -331,6 +331,11 @@ resource "aws_ecs_task_definition" "frontend" {
         {
           name  = "REACT_APP_API_URL"
           value = "http://${aws_lb.main.dns_name}/api"
+        },
+
+        {
+          name  = "BACKEND_URL"
+          value = "http://${aws_lb.main.dns_name}"
         }
       ]
       
