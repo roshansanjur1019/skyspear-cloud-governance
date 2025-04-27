@@ -6,25 +6,23 @@ import { RootState } from './store';
 import { checkAuth } from './store/slices/authSlice';
 
 // Layouts
-import DashboardLayout from './layouts/DashboardLayout';
-import AuthLayout from './layouts/AuthLayout';
+import DashboardLayout from './layouts/DashboardLayout.tsx';
+import AuthLayout from './layouts/AuthLayout.tsx';
 
-// Pages - Authentication
-import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import ResetPasswordPage from './pages/auth/ResetPasswordPage';
-
-// Pages - Dashboard
-import DashboardPage from './pages/dashboard/DashboardPage';
-import ResourcesPage from './pages/dashboard/ResourcesPage';
-import CostOptimizationPage from './pages/dashboard/CostOptimizationPage';
-import SecurityPage from './pages/dashboard/SecurityPage';
-import DisasterRecoveryPage from './pages/dashboard/DisasterRecoveryPage';
-import SettingsPage from './pages/dashboard/SettingsPage';
-
-// Pages - Error
-import NotFoundPage from './pages/error/NotFoundPage';
+// Import pages from the pages directory
+import {
+  LoginPage,
+  RegisterPage,
+  ForgotPasswordPage,
+  ResetPasswordPage,
+  DashboardPage,
+  ResourcesPage,
+  CostOptimizationPage,
+  SecurityPage,
+  DisasterRecoveryPage,
+  SettingsPage,
+  NotFoundPage
+} from './pages';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {

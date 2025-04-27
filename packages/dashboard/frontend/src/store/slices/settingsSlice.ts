@@ -74,20 +74,17 @@ const settingsSlice = createSlice({
       state.cloudProviders[action.payload] = !state.cloudProviders[action.payload];
       localStorage.setItem('settings', JSON.stringify(state));
     },
-    resetSettings: () => {
-      const defaultSettings = {
-        theme: 'system',
-        sidebarCollapsed: false,
-        notifications: true,
-        defaultDashboard: 'overview',
-        cloudProviders: {
-          aws: true,
-          azure: true,
-          gcp: true,
-        },
+    resetSettings: (state) => {
+      state.theme = 'system';
+      state.sidebarCollapsed = false;
+      state.notifications = true;
+      state.defaultDashboard = 'overview';
+      state.cloudProviders = {
+        aws: true,
+        azure: true,
+        gcp: true,
       };
-      localStorage.setItem('settings', JSON.stringify(defaultSettings));
-      return defaultSettings;
+      localStorage.setItem('settings', JSON.stringify(state));
     },
   },
 });

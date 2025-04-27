@@ -35,7 +35,7 @@ services:
     networks:
       - spearpoint-network
 
-  # Frontend Dashboard
+  # Frontend Dashboard with increased memory
   dashboard:
     build:
       context: ./packages/dashboard/frontend
@@ -52,6 +52,9 @@ services:
       # Use the container name and port for the backend service
       - BACKEND_URL=http://spearpoint-backend:3001
       - REACT_APP_API_URL=http://localhost:3001/api
+      # Fix for memory issues during build
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - CI=false
     networks:
       - spearpoint-network
 
