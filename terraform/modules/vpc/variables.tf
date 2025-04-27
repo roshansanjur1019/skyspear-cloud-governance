@@ -125,3 +125,8 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+variable "subnet_ids" {
+  description = "List of subnet IDs for ECS services"
+  type        = list(string)
+  default     = []  # Make it optional
+}
