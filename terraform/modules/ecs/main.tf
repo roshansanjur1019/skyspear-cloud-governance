@@ -389,7 +389,7 @@ resource "aws_ecs_service" "frontend" {
   launch_type     = "FARGATE"
   
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = var.subnet_ids
     security_groups  = [aws_security_group.frontend.id]
     assign_public_ip = true  # Set to false in production and use NAT gateway
   }

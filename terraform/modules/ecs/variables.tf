@@ -92,3 +92,7 @@ variable "frontend_instance_count" {
   type        = number
   default     = 1
 }
+variable "private_subnet_ids" {
+  description = "List of private subnet IDs for ECS services"
+  type        = list(string)
+}
