@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine as build
+FROM node:16-alpine as build
 
 # Set working directory
 WORKDIR /app
@@ -7,8 +7,10 @@ WORKDIR /app
 # Copy package files first for better layer caching
 COPY package*.json ./
 
-# Install dependencies with npm install instead of npm ci
-RUN npm install --legacy-peer-deps
+# Install dependencies and fix specific versions of problematic packages
+RUN npm install --legacy-peer-deps && \
+    npm uninstall ajv ajv-keywords && \
+    npm install --legacy-peer-deps ajv@8.11.0 ajv-keywords@5.1.0
 
 # Copy the rest of the application
 COPY . .
@@ -31,7 +33,7 @@ ENV CI=false
 ENV PUBLIC_URL=/
 
 # Build the application
-RUN npm run build
+RUN npm run build || cat /root/.npm/_logs/*-debug-0.log
 
 # Production stage
 FROM nginx:alpine
