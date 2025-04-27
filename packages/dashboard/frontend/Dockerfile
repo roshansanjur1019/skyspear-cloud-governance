@@ -35,8 +35,11 @@ RUN ls -la node_modules/ajv/ || echo "ajv not found"
 RUN ls -la node_modules/ajv-keywords/ || echo "ajv-keywords not found"
 RUN ls -la node_modules/typescript/ || echo "typescript not found"
 
-# Try to fix index.tsx import if needed
-RUN find ./src -name "index.tsx" -exec sed -i 's/from \'\.\/(App)\';/from \'\.\/$1\.tsx\';/g' {} \; || echo "No index.tsx modification needed"
+# Try to fix index.tsx import if needed - simpler approach
+RUN if [ -f src/index.tsx ]; then \
+    sed -i 's/from \'\.\\/App\';/from \'\.\\/App.tsx\';/g' src/index.tsx; \
+    echo "Fixed App import in index.tsx"; \
+fi
 
 # Build the application with NODE_OPTIONS to increase memory and force flag
 RUN NODE_OPTIONS=--max_old_space_size=4096 CI=false GENERATE_SOURCEMAP=false npm run build --force
