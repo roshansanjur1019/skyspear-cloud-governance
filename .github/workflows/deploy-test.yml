@@ -131,9 +131,20 @@ jobs:
             chmod +x entrypoint.sh
           fi
           
+          # Create .npmrc file to fix installation issues
+          echo "registry=https://registry.npmjs.org/" > .npmrc
+          echo "network-timeout=100000" >> .npmrc
+          echo "fetch-retries=3" >> .npmrc
+          echo "fetch-retry-mintimeout=20000" >> .npmrc
+          echo "fetch-retry-maxtimeout=120000" >> .npmrc
+          echo "legacy-peer-deps=true" >> .npmrc
+          echo "fund=false" >> .npmrc
+          echo "audit=false" >> .npmrc
+          
           # Build and push using Docker directly with the backend URL as a build arg
           docker build \
             --build-arg BACKEND_URL="${{ steps.backend-url.outputs.backend_url }}" \
+            --build-arg NODE_OPTIONS="--max_old_space_size=4096" \
             -t ${FRONTEND_REPO}:latest \
             -t ${FRONTEND_REPO}:${{ github.sha }} .
           docker push ${FRONTEND_REPO}:latest

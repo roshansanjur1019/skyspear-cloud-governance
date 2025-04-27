@@ -1,11 +1,14 @@
-FROM node:18-alpine as build
+FROM node:20-alpine as build
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Copy package files first (for better layer caching)
 COPY package*.json ./
-RUN npm install
+
+# Use npm ci instead of npm install - better for CI environments
+# Add legacy-peer-deps flag to handle peer dependency issues
+RUN npm ci --legacy-peer-deps
 
 # Copy the rest of the application
 COPY . .
@@ -30,7 +33,6 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Set environment variable for backend URL with a default value
-# This should be overridden when running the container
 ENV BACKEND_URL=http://api:3001
 
 # Expose port 80
