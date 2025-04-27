@@ -6,15 +6,21 @@ WORKDIR /app
 # Copy package files first
 COPY package*.json ./
 
-# Install dependencies with legacy peer deps flag to avoid React version issues
-RUN npm install --legacy-peer-deps
+# Install dependencies - note the specific ajv version install
+RUN npm install --legacy-peer-deps && \
+    # First remove any existing ajv and ajv-keywords to avoid conflicts
+    npm uninstall ajv ajv-keywords && \
+    # Then install the compatible versions
+    npm install --legacy-peer-deps ajv@8.11.0 ajv-keywords@5.1.0
 
 # Copy the rest of the application
 COPY . .
 
-# Create a symlink from App.tsx to App.js to allow proper resolution
-# This is a simple solution to avoid modifying the source code
-RUN cd src && ln -sf App.tsx App.js
+# Create .npmrc file to fix installation issues
+RUN echo "registry=https://registry.npmjs.org/" > .npmrc && \
+    echo "legacy-peer-deps=true" >> .npmrc && \
+    echo "fund=false" >> .npmrc && \
+    echo "audit=false" >> .npmrc
 
 # Make sure public directory exists
 RUN mkdir -p public
@@ -24,8 +30,15 @@ RUN if [ ! -f public/index.html ]; then \
     echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>SpearPoint</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>' > public/index.html; \
 fi
 
+# Check node_modules to ensure proper installation
+RUN ls -la node_modules/ajv/ || echo "ajv not found"
+RUN ls -la node_modules/ajv-keywords/ || echo "ajv-keywords not found"
+
+# Try to fix index.tsx import if needed
+RUN find ./src -name "index.tsx" -exec sed -i 's/from \'\.\/(App)\';/from \'\.\/$1\.tsx\';/g' {} \;
+
 # Build the application with NODE_OPTIONS to increase memory
-RUN NODE_OPTIONS=--max_old_space_size=4096 CI=false npm run build
+RUN NODE_OPTIONS=--max_old_space_size=8192 CI=false GENERATE_SOURCEMAP=false npm run build
 
 # Production environment
 FROM nginx:alpine
