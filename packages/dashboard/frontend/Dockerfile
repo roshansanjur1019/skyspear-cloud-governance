@@ -1,14 +1,17 @@
-FROM node:20-alpine as build
+FROM node:18-alpine as build
 
 # Set working directory
 WORKDIR /app
 
+# Install specific npm version known to be more stable with this project
+RUN npm install -g npm@8.19.4
+
 # Copy package files first (for better layer caching)
 COPY package*.json ./
 
-# Use npm ci instead of npm install - better for CI environments
-# Add legacy-peer-deps flag to handle peer dependency issues
-RUN npm ci --legacy-peer-deps
+# Clean npm cache and use clean install with additional flags
+RUN npm cache clean --force && \
+    npm install --no-fund --no-audit --legacy-peer-deps
 
 # Copy the rest of the application
 COPY . .
