@@ -84,13 +84,13 @@ variable "frontend_memory" {
 variable "api_instance_count" {
   description = "The number of API instances to run"
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "frontend_instance_count" {
   description = "The number of frontend instances to run"
   type        = number
-  default     = 1
+  default     = 0
 }
 variable "private_subnet_ids" {
   description = "List of private subnet IDs for ECS services"
