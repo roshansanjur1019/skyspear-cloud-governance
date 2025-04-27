@@ -7,10 +7,10 @@ WORKDIR /app
 # Copy package files first for better layer caching
 COPY package*.json ./
 
-# Install dependencies and fix specific versions of problematic packages
-RUN npm install --legacy-peer-deps && \
-    npm uninstall ajv ajv-keywords && \
-    npm install --legacy-peer-deps ajv@8.11.0 ajv-keywords@5.1.0
+# Install dependencies with specific TypeScript version constraint
+RUN npm install --force && \
+    npm uninstall typescript && \
+    npm install --force typescript@4.9.5
 
 # Copy the rest of the application
 COPY . .
@@ -31,9 +31,10 @@ ENV GENERATE_SOURCEMAP=false
 ENV NODE_OPTIONS=--max_old_space_size=4096
 ENV CI=false
 ENV PUBLIC_URL=/
+ENV FORCE_COLOR=true
 
 # Build the application
-RUN npm run build || cat /root/.npm/_logs/*-debug-0.log
+RUN npm run build || (cat /root/.npm/_logs/*-debug-0.log && exit 1)
 
 # Production stage
 FROM nginx:alpine
