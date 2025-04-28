@@ -3,8 +3,8 @@ FROM node:18-alpine as build
 
 WORKDIR /app
 
-# Copy package files first
-COPY package*.json ./
+# Copy package files from the frontend directory
+COPY dashboard/frontend/package*.json ./
 
 # Create .npmrc with configuration to help with installations
 RUN echo "registry=https://registry.npmjs.org/" > .npmrc && \
@@ -19,14 +19,11 @@ RUN echo "registry=https://registry.npmjs.org/" > .npmrc && \
 # Install dependencies with appropriate flags
 RUN npm install --legacy-peer-deps
 
-# Add specific React Scripts version known to work with your dependencies
-RUN npm install react-scripts@5.0.1 --legacy-peer-deps
-
-# Add required webpack/ajv dependencies explicitly to fix build issues
+# Add required dependencies explicitly
 RUN npm install ajv@8.12.0 ajv-keywords@5.1.0 webpack@5.76.0 --legacy-peer-deps
 
-# Copy all project files
-COPY . ./
+# Copy the frontend source code to the container
+COPY dashboard/frontend/ ./
 
 # Set environment variables for build
 ENV NODE_ENV=production
@@ -55,10 +52,10 @@ COPY --from=build /app/build /usr/share/nginx/html
 RUN mkdir -p /etc/nginx/templates
 
 # Copy nginx configuration template
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY dashboard/frontend/nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
+COPY dashboard/frontend/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Delete default nginx static assets
