@@ -12,6 +12,7 @@ RUN npm install ajv@8.12.0 ajv-keywords@5.1.0 webpack@5.76.0 --legacy-peer-deps
 
 # Copy all source files
 COPY . .
+RUN ls -l src/
 
 # Fix the incorrect import in index.tsx
 RUN sed -i "s|from '/App'|from './App'|g" src/index.tsx
