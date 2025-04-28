@@ -43,6 +43,9 @@ ENV FORCE_COLOR=true
 # Build the application with a retry mechanism
 RUN npm run build || npm run build || (cat /root/.npm/_logs/*-debug-0.log && exit 1)
 
+# Add debugging: Check build output
+RUN echo "Build completed, contents of /app/build:" && ls -la /app/build
+
 # Production stage
 FROM nginx:alpine
 
@@ -52,11 +55,17 @@ RUN apk add --no-cache gettext
 # Copy the build output
 COPY --from=build /app/build /usr/share/nginx/html
 
+# Add debugging: Check copied files
+RUN echo "Contents of /usr/share/nginx/html after copy:" && ls -la /usr/share/nginx/html
+
 # Create a fallback index.html if build failed
 RUN if [ ! -d /usr/share/nginx/html ] || [ -z "$(ls -A /usr/share/nginx/html)" ]; then \
     mkdir -p /usr/share/nginx/html && \
     echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>SpearPoint</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:20px auto;line-height:1.6}h1{color:#1976d2}</style></head><body><h1>SpearPoint Cloud Governance</h1><p>Dashboard is being set up. Please check back soon.</p><p>If you continue to see this page, please contact your administrator.</p></body></html>' > /usr/share/nginx/html/index.html; \
 fi
+
+# Add debugging: Check files after fallback
+RUN echo "Contents of /usr/share/nginx/html after fallback check:" && ls -la /usr/share/nginx/html
 
 # Copy nginx configuration template
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
