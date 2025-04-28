@@ -1,7 +1,5 @@
 // packages/dashboard/frontend/src/api/client.ts
 import axios from 'axios';
-import { store } from '../store';
-import { logout } from '../store/slices/authSlice';
 
 // Create an axios instance with default config
 const api = axios.create({
@@ -34,7 +32,9 @@ api.interceptors.response.use(
   (error) => {
     // Handle 401 Unauthorized error by logging out the user
     if (error.response && error.response.status === 401) {
-      store.dispatch(logout());
+      // Instead of directly importing store, we'll dispatch a custom event
+      // This avoids the circular dependency
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
     return Promise.reject(error);
   }
