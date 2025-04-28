@@ -105,7 +105,8 @@ module "ecs" {
   frontend_image       = "${aws_ecr_repository.frontend.repository_url}:latest"
   db_connection_string = module.mongodb.connection_string
   jwt_secret           = var.jwt_secret
-  private_subnet_ids = module.vpc.private_subnet_ids
+  private_subnet_ids   = module.vpc.private_subnet_ids
+  public_subnet_ids    = module.vpc.public_subnet_ids
   
   # Optional parameters with defaults
   api_port              = 3001

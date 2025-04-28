@@ -96,3 +96,8 @@ variable "private_subnet_ids" {
   description = "List of private subnet IDs for ECS services"
   type        = list(string)
 }
+variable "public_subnet_ids" {
+  description = "List of public subnet IDs for ECS services"
+  type        = list(string)
+  
+}
