@@ -4,28 +4,21 @@ FROM node:16-alpine as build
 WORKDIR /app
 
 # Copy package files first
-COPY packages/dashboard/frontend/package*.json ./
+COPY package*.json ./
 
 # Install dependencies
 RUN npm install --legacy-peer-deps
 
 # Copy the frontend application code
-COPY packages/dashboard/frontend/ ./
+COPY . ./
 
 # Add environment variables for build
 ENV NODE_ENV=production
 ENV CI=false
 ENV PUBLIC_URL=/
 
-# Print the directory structure before building
-RUN echo "Directory structure before build:" && ls -la
-
 # Build the application
-RUN npm run build && echo "Build completed successfully"
-
-# Print the directory structure after building
-RUN echo "Directory structure after build:" && ls -la
-RUN echo "Build directory contents:" && ls -la build || echo "Build directory not found"
+RUN npm run build
 
 # Production stage
 FROM nginx:alpine
@@ -39,10 +32,7 @@ RUN echo '<html><body><h1>SpearPoint Test Page</h1><p>If you see this page, ngin
 # Copy the build output
 COPY --from=build /app/build /usr/share/nginx/html
 
-# Debug: Check what was copied
-RUN echo "Files in /usr/share/nginx/html:" && ls -la /usr/share/nginx/html
-
-# Create a simple nginx configuration that will work for React routing
+# Create a simple nginx configuration
 RUN echo 'server { \
     listen 80; \
     server_name _; \
