@@ -316,7 +316,7 @@ resource "aws_ecs_task_definition" "api" {
         },
         {
           name  = "PORT"
-          value = "${var.api_port}"
+           value = tostring(var.api_port)
         },
         {
           name  = "NODE_ENV"
