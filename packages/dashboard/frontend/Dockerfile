@@ -59,7 +59,7 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Set environment variable for backend URL
-ENV BACKEND_URL=http://api:3001
+ENV BACKEND_URL=http://api.spearpoint.local:3001
 
 # Expose port 80
 EXPOSE 80
