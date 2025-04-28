@@ -176,7 +176,7 @@ const SettingsPage: React.FC = () => {
   };
   
   const handleNotificationsToggle = () => {
-    dispatch(toggleNotifications({ enabled: !settings.notifications }));
+    dispatch(toggleNotifications());
     setSuccessMessage('Notification settings updated');
   };
   
@@ -419,7 +419,7 @@ const SettingsPage: React.FC = () => {
               control={
                 <Switch
                   checked={settings.sidebarCollapsed}
-                  onChange={() => dispatch(toggleNotifications({ enabled: !settings.sidebarCollapsed }))}
+                  onChange={() => dispatch(toggleNotifications())}
                   color="primary"
                 />
               }

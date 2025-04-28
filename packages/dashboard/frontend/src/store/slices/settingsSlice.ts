@@ -1,3 +1,4 @@
+// Updated settingsSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface SettingsState {
@@ -74,7 +75,7 @@ const settingsSlice = createSlice({
       state.cloudProviders[action.payload] = !state.cloudProviders[action.payload];
       localStorage.setItem('settings', JSON.stringify(state));
     },
-    resetSettings: (state) => {
+    resetSettings: (state, action: PayloadAction<{ resetAll: boolean }>) => {
       state.theme = 'system';
       state.sidebarCollapsed = false;
       state.notifications = true;
