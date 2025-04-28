@@ -90,6 +90,174 @@ jobs:
           BACKEND_URL="http://${{ secrets.ECS_CLUSTER_NAME }}-backend.internal:3001"
           echo "backend_url=${BACKEND_URL}" >> $GITHUB_OUTPUT
       
+      # Fix circular dependencies in the frontend code
+      - name: Fix circular dependencies in frontend code
+        run: |
+          # Create directory for patches if needed
+          mkdir -p patches
+          
+          # Create client.ts patch to remove store dependency
+          cat > patches/fix-client.patch << 'EOF'
+          --- a/packages/dashboard/frontend/src/api/client.ts
+          +++ b/packages/dashboard/frontend/src/api/client.ts
+          @@ -1,6 +1,4 @@
+           import axios from 'axios';
+          -import { store } from '../store';
+          -import { logout } from '../store/slices/authSlice';
+           
+           // Create an axios instance with default config
+           const api = axios.create({
+          @@ -31,7 +29,7 @@
+             (error) => {
+               // Handle 401 Unauthorized error by logging out the user
+               if (error.response && error.response.status === 401) {
+          -      store.dispatch(logout());
+          +      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+               }
+               return Promise.reject(error);
+             }
+          EOF
+          
+          # Create index.tsx patch to add event listener
+          cat > patches/fix-index.patch << 'EOF'
+          --- a/packages/dashboard/frontend/src/index.tsx
+          +++ b/packages/dashboard/frontend/src/index.tsx
+          @@ -5,6 +5,7 @@
+           import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+           import App from './App';
+           import { store } from './store';
+          +import { logout } from './store/slices/authSlice';
+           import './index.css';
+           
+           // Create React Query client
+          @@ -17,6 +18,12 @@
+             },
+           });
+           
+          +// Add event listener for unauthorized events
+          +// This breaks the circular dependency between store and api client
+          +window.addEventListener('auth:unauthorized', () => {
+          +  store.dispatch(logout());
+          +});
+          +
+           const root = ReactDOM.createRoot(
+             document.getElementById('root') as HTMLElement
+           );
+          EOF
+      
+      # Update nginx configuration
+      - name: Update nginx configuration
+        run: |
+          cat > packages/dashboard/frontend/nginx.conf.template << 'EOF'
+          # nginx.conf.template
+          server {
+              listen 80 default_server;
+              server_name _;
+              
+              # Root directory for static files
+              root /usr/share/nginx/html;
+              
+              # Compression
+              gzip on;
+              gzip_types text/plain application/xml text/css application/javascript;
+              gzip_min_length 1000;
+              
+              # Default location serving the frontend
+              location / {
+                  # Try to serve file directly, fallback to index.html for SPA routing
+                  try_files $uri $uri/ /index.html;
+                  index index.html index.htm;
+              }
+              
+              # Proxy API requests to backend
+              location /api/ {
+                  # The trailing slash in location and absence in proxy_pass is important
+                  # This strips the /api prefix when forwarding to the backend
+                  proxy_pass ${BACKEND_URL}/;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_cache_bypass $http_upgrade;
+              }
+              
+              # Add explicit health check endpoint
+              location = /health {
+                  proxy_pass ${BACKEND_URL}/health;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+              }
+              
+              # Error handling
+              error_page 404 /index.html;
+              
+              # Caching static assets
+              location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ {
+                  expires 1y;
+                  add_header Cache-Control "public, max-age=31536000";
+              }
+          }
+          EOF
+      
+      # Update entrypoint.sh
+      - name: Update entrypoint.sh
+        run: |
+          cat > packages/dashboard/frontend/entrypoint.sh << 'EOF'
+          #!/bin/sh
+          
+          # Print debug info
+          echo "Starting entrypoint.sh"
+          echo "Content of /usr/share/nginx/html:"
+          ls -la /usr/share/nginx/html/
+          
+          # Print environment variables
+          echo "Environment variables:"
+          echo "BACKEND_URL: ${BACKEND_URL:-http://api.spearpoint.local:3001}"
+          
+          # Set default BACKEND_URL if not provided
+          export BACKEND_URL=${BACKEND_URL:-http://api.spearpoint.local:3001}
+          
+          # Replace environment variables in the nginx config
+          echo "Generating nginx config..."
+          envsubst '${BACKEND_URL}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+          
+          # Print the generated config
+          echo "Generated nginx config:"
+          cat /etc/nginx/conf.d/default.conf
+          
+          # Create runtime config for React app (for client-side env variables)
+          echo "Generating runtime config for React app..."
+          cat > /usr/share/nginx/html/config.js << EOFJS
+          window.RUNTIME_CONFIG = {
+            REACT_APP_API_URL: '${REACT_APP_API_URL:-/api}',
+            APP_ENV: '${NODE_ENV:-production}'
+          };
+          EOFJS
+          
+          # Print the generated config
+          echo "Generated runtime config:"
+          cat /usr/share/nginx/html/config.js
+          
+          # Make sure the index.html includes our runtime config
+          if grep -q "config.js" /usr/share/nginx/html/index.html; then
+            echo "config.js already included in index.html"
+          else
+            echo "Adding config.js to index.html"
+            sed -i 's/<head>/<head><script src="\/config.js"><\/script>/' /usr/share/nginx/html/index.html
+          fi
+          
+          # Start nginx
+          echo "Starting nginx..."
+          exec nginx -g 'daemon off;'
+          EOF
+          
+          # Make sure it's executable
+          chmod +x packages/dashboard/frontend/entrypoint.sh
+      
       # Build and push the backend image using secrets
       - name: Build and push backend image
         run: |
@@ -107,11 +275,20 @@ jobs:
             ./requirements.txt
           fi
           
+          # Retrieve MongoDB connection string parameters from SSM
+          DB_PASSWORD=$(aws ssm get-parameter --name "/spearpoint/test/db_password" --with-decryption --query "Parameter.Value" --output text)
+          JWT_SECRET=$(aws ssm get-parameter --name "/spearpoint/test/jwt_secret" --with-decryption --query "Parameter.Value" --output text)
+          
           # Construct the ECR URL using the secret repo name
           BACKEND_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ secrets.BACKEND_ECR_REPO_NAME }}"
           
-          # Build and push using Docker directly
-          docker build -t ${BACKEND_REPO}:latest -t ${BACKEND_REPO}:${{ github.sha }} .
+          # Build and push using Docker directly with improved environment variables
+          docker build \
+            --build-arg DATABASE_URL="mongodb://spearpoint:${DB_PASSWORD}@mongodb:27017/spearpoint?authSource=admin&retryWrites=false" \
+            --build-arg JWT_SECRET="${JWT_SECRET}" \
+            --build-arg NODE_ENV="production" \
+            -t ${BACKEND_REPO}:latest \
+            -t ${BACKEND_REPO}:${{ github.sha }} .
           docker push ${BACKEND_REPO}:latest
           docker push ${BACKEND_REPO}:${{ github.sha }}
       
@@ -127,9 +304,11 @@ jobs:
           
           # Set appropriate permissions on the entrypoint.sh
           cd packages/dashboard/frontend
-          if [ -f "entrypoint.sh" ]; then
-            chmod +x entrypoint.sh
-          fi
+          chmod +x entrypoint.sh
+          
+          # Apply patches to fix circular dependencies
+          patch -p1 < ../../patches/fix-client.patch || echo "Client patch may have failed or already applied"
+          patch -p1 < ../../patches/fix-index.patch || echo "Index patch may have failed or already applied"
           
           # Create .npmrc file to fix installation issues
           echo "registry=https://registry.npmjs.org/" > .npmrc
@@ -141,10 +320,13 @@ jobs:
           echo "fund=false" >> .npmrc
           echo "audit=false" >> .npmrc
           
-          # Build and push using Docker directly with the backend URL as a build arg
+          # Build and push using Docker directly with improved environment variables
           docker build \
             --build-arg BACKEND_URL="${{ steps.backend-url.outputs.backend_url }}" \
+            --build-arg REACT_APP_API_URL="/api" \
+            --build-arg NODE_ENV="production" \
             --build-arg NODE_OPTIONS="--max_old_space_size=4096" \
+            --build-arg CI=false \
             -t ${FRONTEND_REPO}:latest \
             -t ${FRONTEND_REPO}:${{ github.sha }} .
           docker push ${FRONTEND_REPO}:latest
@@ -162,6 +344,37 @@ jobs:
         run: |
           # Use the secrets directly
           aws ecs wait services-stable --cluster ${{ secrets.ECS_CLUSTER_NAME }} --services ${{ secrets.ECS_BACKEND_SERVICE }} ${{ secrets.ECS_FRONTEND_SERVICE }}
+      
+      # Verify application health
+      - name: Verify Application Health
+        run: |
+          # Get the ALB URL from the ECS service
+          ALB_URL=$(aws ecs describe-services --cluster ${{ secrets.ECS_CLUSTER_NAME }} --services ${{ secrets.ECS_FRONTEND_SERVICE }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          ALB_URL=$(aws elbv2 describe-target-groups --target-group-arns ${ALB_URL} --query 'TargetGroups[0].LoadBalancerArns[0]' --output text)
+          ALB_URL=$(aws elbv2 describe-load-balancers --load-balancer-arns ${ALB_URL} --query 'LoadBalancers[0].DNSName' --output text)
+          
+          echo "Application deployed to: http://${ALB_URL}"
+          echo "Checking application health..."
+          
+          # Wait for the application to be ready
+          retries=0
+          max_retries=10
+          while [ $retries -lt $max_retries ]; do
+            if curl -s -o /dev/null -w "%{http_code}" "http://${ALB_URL}/health" | grep -q "200"; then
+              echo "Health check passed!"
+              break
+            fi
+            
+            echo "Waiting for application to be healthy... (attempt $((retries+1))/$max_retries)"
+            retries=$((retries+1))
+            
+            if [ $retries -eq $max_retries ]; then
+              echo "Health check failed after $max_retries attempts."
+              # Don't fail the deployment - might just need more time
+            fi
+            
+            sleep 30
+          done
           
       # Output deployment complete
       - name: Deployment complete

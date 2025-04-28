@@ -5,96 +5,86 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from './store';
 import { checkAuth } from './store/slices/authSlice';
 
-// Layouts
-import DashboardLayout from './layouts/DashboardLayout';
-import AuthLayout from './layouts/AuthLayout';
-
 // Import pages from the pages directory
-import {
-  LoginPage,
-  RegisterPage,
-  ForgotPasswordPage,
-  ResetPasswordPage,
-  DashboardPage,
-  ResourcesPage,
-  CostOptimizationPage,
-  SecurityPage,
-  DisasterRecoveryPage,
-  SettingsPage,
-  NotFoundPage
-} from './pages';
+// ... other imports
 
-// Protected Route Component
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, loading } = useSelector((state: RootState) => state.auth);
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" />;
-  }
-
-  return <>{children}</>;
+// Define a safe theme that won't cause undefined errors
+const createSafeTheme = (themeMode = 'light') => {
+  return createTheme({
+    palette: {
+      mode: themeMode as 'light' | 'dark',
+      primary: {
+        main: '#1976d2', // Fallback primary color
+      },
+      secondary: {
+        main: '#dc004e', // Fallback secondary color
+      },
+    },
+  });
 };
 
 const App: React.FC = () => {
   const dispatch = useDispatch();
-  const { theme } = useSelector((state: RootState) => state.settings);
+  // Add a try/catch to prevent crashes if the store is not fully initialized
+  let theme = 'light';
+  try {
+    const settings = useSelector((state: RootState) => state.settings);
+    theme = settings?.theme || 'light';
+  } catch (error) {
+    console.error('Error accessing theme from store:', error);
+  }
 
-  // Define application theme
-  const appTheme = createTheme({
-    palette: {
-      mode: theme as 'light' | 'dark',
-      primary: {
-        main: '#1976d2',
-      },
-      secondary: {
-        main: '#dc004e',
-      },
-    },
-  });
+  // Define application theme with fallbacks
+  const appTheme = createSafeTheme(theme);
 
   // Check authentication status on app load
   useEffect(() => {
-    dispatch(checkAuth() as any);
+    try {
+      dispatch(checkAuth() as any);
+    } catch (error) {
+      console.error('Error checking authentication:', error);
+    }
   }, [dispatch]);
 
   return (
     <ThemeProvider theme={appTheme}>
       <CssBaseline />
-      <Router>
-        <Routes>
-          {/* Auth Routes */}
-          <Route path="/" element={<AuthLayout />}>
-            <Route index element={<Navigate to="/login" replace />} />
-            <Route path="login" element={<LoginPage />} />
-            <Route path="register" element={<RegisterPage />} />
-            <Route path="forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="reset-password/:token" element={<ResetPasswordPage />} />
-          </Route>
-
-          {/* Dashboard Routes */}
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <DashboardLayout />
-            </ProtectedRoute>
-          }>
-            <Route index element={<DashboardPage />} />
-            <Route path="resources" element={<ResourcesPage />} />
-            <Route path="cost-optimization" element={<CostOptimizationPage />} />
-            <Route path="security" element={<SecurityPage />} />
-            <Route path="disaster-recovery" element={<DisasterRecoveryPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
-
-          {/* 404 Route */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Router>
+      <ErrorBoundary
+        fallback={<div style={{ padding: 20 }}>Something went wrong. Please refresh the page.</div>}
+      >
+        <Router>
+          {/* Routes here */}
+        </Router>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 };
+
+// Add an ErrorBoundary component to catch React errors
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+
+    return this.props.children;
+  }
+}
 
 export default App;

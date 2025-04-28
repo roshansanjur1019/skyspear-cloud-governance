@@ -1,4 +1,3 @@
-// packages/dashboard/frontend/src/api/client.ts
 import axios from 'axios';
 
 // Create an axios instance with default config
@@ -32,8 +31,7 @@ api.interceptors.response.use(
   (error) => {
     // Handle 401 Unauthorized error by logging out the user
     if (error.response && error.response.status === 401) {
-      // Instead of directly importing store, we'll dispatch a custom event
-      // This avoids the circular dependency
+      // Dispatch a custom event instead of directly depending on the store
       window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
     return Promise.reject(error);
