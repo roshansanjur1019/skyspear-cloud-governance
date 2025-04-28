@@ -1,84 +1,66 @@
 # Build stage
 FROM node:16-alpine as build
 
-# Set working directory
 WORKDIR /app
 
-# Add npm configuration for network resilience
-RUN npm config set fetch-retry-mintimeout 20000 \
-    && npm config set fetch-retry-maxtimeout 120000 \
-    && npm config set fetch-retries 5 \
-    && npm config set registry https://registry.npmjs.org/
+# Copy package files first
+COPY packages/dashboard/frontend/package*.json ./
 
-# Copy package files first for better layer caching
-COPY package*.json ./
+# Install dependencies
+RUN npm install --legacy-peer-deps
 
-# Install dependencies with specific TypeScript version constraint
-# Adding --network-timeout to make npm more resilient to network issues
-RUN npm install --force --network-timeout=100000 && \
-    npm uninstall typescript && \
-    npm install --force typescript@4.9.5 --network-timeout=100000
+# Copy the frontend application code
+COPY packages/dashboard/frontend/ ./
 
-# Copy the rest of the application
-COPY . .
-
-# Make sure public directory exists
-RUN mkdir -p public
-
-# Create index.html if it doesn't exist
-RUN if [ ! -f public/index.html ]; then \
-    echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SpearPoint Cloud Governance</title></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>' > public/index.html; \
-fi
-
-# Set environment variables for build
-ENV SKIP_PREFLIGHT_CHECK=true
-ENV TSC_COMPILE_ON_ERROR=true
-ENV DISABLE_ESLINT_PLUGIN=true
-ENV GENERATE_SOURCEMAP=false
-ENV NODE_OPTIONS=--max_old_space_size=4096
+# Add environment variables for build
+ENV NODE_ENV=production
 ENV CI=false
 ENV PUBLIC_URL=/
-ENV FORCE_COLOR=true
 
-# Build the application with a retry mechanism
-RUN npm run build || npm run build || (cat /root/.npm/_logs/*-debug-0.log && exit 1)
+# Print the directory structure before building
+RUN echo "Directory structure before build:" && ls -la
 
-# Add debugging: Check build output
-RUN echo "Build completed, contents of /app/build:" && ls -la /app/build
+# Build the application
+RUN npm run build && echo "Build completed successfully"
+
+# Print the directory structure after building
+RUN echo "Directory structure after build:" && ls -la
+RUN echo "Build directory contents:" && ls -la build || echo "Build directory not found"
 
 # Production stage
 FROM nginx:alpine
 
-# Install gettext for envsubst
-RUN apk add --no-cache gettext
+# Remove default nginx content
+RUN rm -rf /usr/share/nginx/html/*
+
+# Create a test file to verify nginx is serving files
+RUN echo '<html><body><h1>SpearPoint Test Page</h1><p>If you see this page, nginx is working correctly.</p></body></html>' > /usr/share/nginx/html/test.html
 
 # Copy the build output
 COPY --from=build /app/build /usr/share/nginx/html
 
-# Add debugging: Check copied files
-RUN echo "Contents of /usr/share/nginx/html after copy:" && ls -la /usr/share/nginx/html
+# Debug: Check what was copied
+RUN echo "Files in /usr/share/nginx/html:" && ls -la /usr/share/nginx/html
 
-# Create a fallback index.html if build failed
-RUN if [ ! -d /usr/share/nginx/html ] || [ -z "$(ls -A /usr/share/nginx/html)" ]; then \
-    mkdir -p /usr/share/nginx/html && \
-    echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>SpearPoint</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:20px auto;line-height:1.6}h1{color:#1976d2}</style></head><body><h1>SpearPoint Cloud Governance</h1><p>Dashboard is being set up. Please check back soon.</p><p>If you continue to see this page, please contact your administrator.</p></body></html>' > /usr/share/nginx/html/index.html; \
-fi
+# Create a simple nginx configuration that will work for React routing
+RUN echo 'server { \
+    listen 80; \
+    server_name _; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+    location /api { \
+        proxy_pass http://api.spearpoint.local:3001; \
+        proxy_http_version 1.1; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_set_header X-Forwarded-Proto $scheme; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
-# Add debugging: Check files after fallback
-RUN echo "Contents of /usr/share/nginx/html after fallback check:" && ls -la /usr/share/nginx/html
-
-# Copy nginx configuration template
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
-
-# Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Set environment variable for backend URL
-ENV BACKEND_URL=http://api.spearpoint.local:3001
-
-# Expose port 80
 EXPOSE 80
 
-# Run entrypoint script
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
