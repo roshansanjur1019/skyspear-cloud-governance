@@ -6,8 +6,8 @@ import { RootState } from './store';
 import { checkAuth } from './store/slices/authSlice';
 
 // Layouts
-import DashboardLayout from './layouts/DashboardLayout.tsx';
-import AuthLayout from './layouts/AuthLayout.tsx';
+import DashboardLayout from './layouts/DashboardLayout';
+import AuthLayout from './layouts/AuthLayout';
 
 // Import pages from the pages directory
 import {
